@@ -1,29 +1,33 @@
-# Use Python 3.11 slim image
 FROM python:3.11-slim
 
-# Install Tesseract and Japanese language packs with suppressed warnings
+# Install system dependencies with clean up
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-jpn \
     tesseract-ocr-jpn-vert \
+    libgl1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
-# Copy only necessary files (improves build caching)
+# Copy requirements first for better caching
 COPY requirements.txt .
-COPY server.py .
-COPY tessdata/ ./tessdata/
-COPY dictionaries/ ./dictionaries/
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Python dependencies as non-root user
+# Copy the rest of the files
+COPY . .
+
+# Set environment variables
+ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/4.00/tessdata/
+ENV FLASK_APP=server.py
+
+# Create non-root user and set permissions
 RUN useradd -m appuser && \
     chown -R appuser:appuser /app
 USER appuser
 
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Run the app
+# Expose and run
+EXPOSE 10000
 CMD ["gunicorn", "--bind", "0.0.0.0:10000", "server:app"]
