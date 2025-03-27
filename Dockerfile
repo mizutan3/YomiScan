@@ -1,33 +1,38 @@
 FROM python:3.11-slim
 
-# Install system dependencies with clean up
+# 1. Install system dependencies
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-jpn \
     tesseract-ocr-jpn-vert \
     libgl1 \
-    && rm -rf /var/lib/apt/lists/* 
+    && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
-WORKDIR /app
-
-# Copy requirements first for better caching
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy the rest of the files
-COPY . .
-
-# Set environment variables
-ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/4.00/tessdata/
-ENV FLASK_APP=server.py
-
-# Create non-root user and set permissions
+# 2. Create appuser early and set up environment
 RUN useradd -m appuser && \
-    chown -R appuser:appuser /app
+    mkdir -p /app && \
+    chown appuser:appuser /app
+
+# 3. Set working directory and switch user
+WORKDIR /app
 USER appuser
 
-# Expose and run
-EXPOSE 10000
-CMD ["gunicorn", "--bind", "0.0.0.0:10000", "server:app"]
+# 4. Copy requirements and install as user
+COPY --chown=appuser:appuser requirements.txt .
+RUN pip install --user --no-cache-dir -r requirements.txt
+
+# 5. Copy application files
+COPY --chown=appuser:appuser . .
+
+# 6. Set environment variables
+ENV PATH="/home/appuser/.local/bin:${PATH}"
+ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/4.00/tessdata/
+ENV FLASK_APP=server.py
+ENV PORT=10000
+
+# 7. Ensure the dictionaries directory exists and is writable
+RUN mkdir -p dictionaries && chown appuser:appuser dictionaries
+
+# 8. Run command
+CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "server:app"]
