@@ -43,7 +43,6 @@ def load_config():
                 active_dictionaries = set(config.get('active_dictionaries', []))
     except Exception as e:
         print(f"Error loading config: {str(e)}")
-        # Reset to defaults if config is corrupted
         dictionary_order = []
         active_dictionaries = set()
 
@@ -81,7 +80,6 @@ def load_dictionary(dict_name):
     if not os.path.exists(dict_path):
         return False
 
-    # Validate dictionary structure first
     index_path = os.path.join(dict_path, 'index.json')
     if not os.path.exists(index_path):
         return False
@@ -101,7 +99,7 @@ def load_dictionary(dict_name):
                 term_bank_files.append(os.path.join(root, file))
 
     if not term_bank_files:
-        return False  # Not a valid dictionary
+        return False
 
     term_bank_files.sort(key=lambda x: int(x.split("_")[-1].split(".")[0]))
 
@@ -120,7 +118,7 @@ def load_dictionary(dict_name):
                         structured_content = entry[5]
 
                         content_data = process_structured_content(structured_content)
-                        content_data["dict"] = dict_name  # Track which dictionary this came from
+                        content_data["dict"] = dict_name
 
                         if key not in dictionary_map:
                             dictionary_map[key] = {}
@@ -140,46 +138,38 @@ def load_dictionary(dict_name):
 
 def initialize_dictionaries():
     print("Initializing dictionaries...")
-    load_config()  # Load saved configuration
+    load_config()
 
-    # Get all available dictionaries
     available = [d['name'] for d in get_available_dictionaries()]
 
-    # If we have a saved order, use that, otherwise initialize with all available
     if not dictionary_order:
         dictionary_order.extend(available)
 
-    # Load dictionaries that were active in the last session
     for dict_name in dictionary_order:
         if dict_name in active_dictionaries:
             load_dictionary(dict_name)
 
-    save_config()  # Ensure config is saved after initialization
+    save_config()
 
 def unload_dictionary(dict_name: str) -> bool:
-    """Unload a dictionary by removing its entries"""
     if dict_name not in active_dictionaries:
         return False
 
-    # Remove all entries from this dictionary
     for word in list(dictionary_map.keys()):
         for reading in list(dictionary_map[word].keys()):
-            # Filter out entries from this dictionary
             dictionary_map[word][reading] = [
                 entry for entry in dictionary_map[word][reading]
                 if entry.get("dict") != dict_name
             ]
 
-            # Remove reading if empty
             if not dictionary_map[word][reading]:
                 del dictionary_map[word][reading]
 
-        # Remove word if empty
         if not dictionary_map[word]:
             del dictionary_map[word]
 
     active_dictionaries.remove(dict_name)
-    save_config()  # Save the updated active dictionaries
+    save_config()
     return True
 
 def get_available_dictionaries() -> List[Dict]:
