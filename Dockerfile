@@ -7,7 +7,7 @@ RUN apt-get update && \
     tesseract-ocr-jpn \
     tesseract-ocr-jpn-vert \
     libgl1 \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* 
 
 # Set working directory
 WORKDIR /app
