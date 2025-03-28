@@ -51,3 +51,10 @@ echo "Dictionary path:"
 mecab-config --dicdir
 echo "Configuration:"
 cat /usr/local/etc/mecabrc
+
+# Verify Japanese language support
+echo "Checking installed Tesseract languages:"
+tesseract --list-langs
+
+# If Japanese isn't listed, install it explicitly
+sudo apt-get install -y tesseract-ocr-jpn tesseract-ocr-jpn-vert
