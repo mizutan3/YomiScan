@@ -19,20 +19,8 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 #pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-#pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
-#os.environ['TESSDATA_PREFIX'] = '/usr/share/tesseract-ocr/4.00/tessdata/'
-
-tesseract_path = None
-for possible_path in ['/usr/bin/tesseract', '/usr/local/bin/tesseract']:
-    if os.path.exists(possible_path):
-        tesseract_path = possible_path
-        break
-
-if tesseract_path:
-    pytesseract.pytesseract.tesseract_cmd = tesseract_path
-    os.environ['TESSDATA_PREFIX'] = '/usr/share/tesseract-ocr/4.00/tessdata/'
-else:
-    raise RuntimeError("Tesseract OCR not found in any standard location")
+pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
+os.environ['TESSDATA_PREFIX'] = '/usr/share/tesseract-ocr/4.00/tessdata/'
 
 #mecab = MeCab.Tagger("-Owakati")
 #mecab = MeCab.Tagger("-Owakati -d /usr/lib/x86_64-linux-gnu/mecab/dic/mecab-ipadic-utf8")
