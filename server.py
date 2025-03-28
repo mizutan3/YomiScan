@@ -26,15 +26,26 @@ os.environ['TESSDATA_PREFIX'] = '/usr/share/tesseract-ocr/4.00/tessdata/'
 #mecab = MeCab.Tagger("-Owakati -d /usr/lib/x86_64-linux-gnu/mecab/dic/mecab-ipadic-utf8")
 # Replace the MeCab initialization with:
 try:
-    mecab = MeCab.Tagger("-Owakati -d /usr/lib/x86_64-linux-gnu/mecab/dic/mecab-ipadic-utf8 -r /usr/local/etc/mecabrc")
-    # Test MeCab is working
+    # Try system-installed MeCab first
+    mecab = MeCab.Tagger("-Owakati -d /usr/lib/x86_64-linux-gnu/mecab/dic/mecab-ipadic-utf8")
     test_output = mecab.parse("テスト")
-    if not test_output:
+    if not test_output.strip():
         raise RuntimeError("MeCab returned empty output")
 except Exception as e:
-    print(f"MeCab initialization failed: {str(e)}")
-    # Fallback to system default if custom path fails
-    mecab = MeCab.Tagger("-Owakati")
+    print(f"System MeCab failed: {str(e)}")
+    try:
+        # Fallback to unidic-lite
+        import unidic_lite
+        unidic_path = unidic_lite.__path__[0]
+        mecab = MeCab.Tagger(f"-Owakati -d {unidic_path}/dicdir")
+        test_output = mecab.parse("テスト")
+        if not test_output.strip():
+            raise RuntimeError("Unidic MeCab returned empty output")
+    except Exception as e:
+        print(f"Unidic MeCab failed: {str(e)}")
+        # Ultimate fallback - simple tokenizer
+        mecab = None
+        print("Warning: Falling back to simple whitespace tokenizer")
 
 DICTIONARY_BASE_PATH = os.path.join(os.path.dirname(__file__), "dictionaries")
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "app_config.json")
@@ -220,6 +231,16 @@ def preprocess_image(image_data: str) -> np.ndarray:
 def segment_words(text: str) -> List[str]:
     if not text.strip():
         return []
+    
+    if mecab is None:
+        # Fallback tokenization when MeCab fails
+        return [w for w in text.split() if w.strip()]
+    
+    try:
+        words = mecab.parse(text).strip().split()
+        return [w for w in words if w.strip()]
+    except:
+        return [w for w in text.split() if w.strip()]
 
     words = mecab.parse(text).strip().split()
     return [w for w in words if w.strip()]
