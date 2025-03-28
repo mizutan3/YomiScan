@@ -22,7 +22,8 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
 os.environ['TESSDATA_PREFIX'] = '/usr/share/tesseract-ocr/4.00/tessdata/'
 
-mecab = MeCab.Tagger("-Owakati")
+#mecab = MeCab.Tagger("-Owakati")
+mecab = MeCab.Tagger("-Owakati -d /usr/lib/x86_64-linux-gnu/mecab/dic/mecab-ipadic-utf8")
 
 DICTIONARY_BASE_PATH = os.path.join(os.path.dirname(__file__), "dictionaries")
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "app_config.json")
