@@ -5,8 +5,6 @@ services:
     buildCommand: |
       chmod +x build.sh
       ./build.sh
-      chmod +x mecab_config.sh
-      ./mecab_config.sh
     startCommand: "gunicorn server:app"
     envVars:
       - key: PYTHON_VERSION
