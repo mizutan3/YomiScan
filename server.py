@@ -19,8 +19,20 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 #pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
+#pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
 os.environ['TESSDATA_PREFIX'] = '/usr/share/tesseract-ocr/4.00/tessdata/'
+
+try:
+    pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
+    # Test Tesseract installation
+    pytesseract.get_tesseract_version()
+except:
+    # Fallback to system PATH
+    pytesseract.pytesseract.tesseract_cmd = 'tesseract'
+    try:
+        pytesseract.get_tesseract_version()
+    except:
+        raise RuntimeError("Tesseract is not installed or not in your PATH")
 
 #mecab = MeCab.Tagger("-Owakati")
 #mecab = MeCab.Tagger("-Owakati -d /usr/lib/x86_64-linux-gnu/mecab/dic/mecab-ipadic-utf8")
