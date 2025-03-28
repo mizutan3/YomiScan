@@ -25,18 +25,18 @@ os.environ['TESSDATA_PREFIX'] = '/usr/share/tesseract-ocr/4.00/tessdata/'
 #mecab = MeCab.Tagger("-Owakati")
 #mecab = MeCab.Tagger("-Owakati -d /usr/lib/x86_64-linux-gnu/mecab/dic/mecab-ipadic-utf8")
 MECAB_DICT_PATH = os.path.join(os.path.dirname(__file__), "mecab/dic/ipadic")
-MECABRC_PATH = os.path.join(os.path.dirname(__file__), "mecab/mecabrc")
+MECABRC_PATH = os.path.join(os.path.dirname(__file__), "mecab/etc/mecabrc")
 
 try:
-    # Try with bundled dictionary
+    # Try with downloaded dictionary
     mecab = MeCab.Tagger(f"-Owakati -r {MECABRC_PATH} -d {MECAB_DICT_PATH}")
     test_output = mecab.parse("テスト")
     if not test_output.strip():
         raise RuntimeError("MeCab returned empty output")
 except Exception as e:
-    print(f"Bundled MeCab failed: {str(e)}")
+    print(f"Downloaded MeCab failed: {str(e)}")
     try:
-        # Fallback to system dictionary
+        # Fallback to system-installed dictionary
         mecab = MeCab.Tagger("-Owakati -d /usr/lib/x86_64-linux-gnu/mecab/dic/mecab-ipadic-utf8")
         test_output = mecab.parse("テスト")
         if not test_output.strip():
