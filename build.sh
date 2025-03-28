@@ -1,20 +1,26 @@
 #!/bin/bash
 set -o errexit
 
-# Install MeCab first
-chmod +x install_mecab.sh
-./install_mecab.sh
-
-# Then install OCR tools
+# Install system dependencies
+sudo apt-get update
 sudo apt-get install -y \
     tesseract-ocr \
     libtesseract-dev \
     tesseract-ocr-jpn \
-    tesseract-ocr-script-jpan-vert
+    tesseract-ocr-script-jpan-vert \
+    mecab \
+    libmecab-dev \
+    mecab-utils
+
+# Create symlinks to our bundled dictionary
+sudo mkdir -p /usr/local/etc/
+sudo ln -sf /opt/render/project/src/mecab/mecabrc /usr/local/etc/mecabrc
+sudo ln -sf /opt/render/project/src/mecab/dic /usr/local/lib/mecab/dic
 
 # Install Python dependencies
 pip install -r requirements.txt
 
-# Copy unidic-lite dictionary to expected location
-UNIDIC_PATH=$(python -c "import unidic_lite; print(unidic_lite.__path__[0])")
-sudo cp -r $UNIDIC_PATH/dicdir /usr/local/lib/mecab/dic/unidic-lite
+# Verify installation
+echo "MeCab configuration:"
+mecab-config --dicdir
+cat /usr/local/etc/mecabrc
