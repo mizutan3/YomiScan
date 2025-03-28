@@ -23,7 +23,18 @@ pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
 os.environ['TESSDATA_PREFIX'] = '/usr/share/tesseract-ocr/4.00/tessdata/'
 
 #mecab = MeCab.Tagger("-Owakati")
-mecab = MeCab.Tagger("-Owakati -d /usr/lib/x86_64-linux-gnu/mecab/dic/mecab-ipadic-utf8")
+#mecab = MeCab.Tagger("-Owakati -d /usr/lib/x86_64-linux-gnu/mecab/dic/mecab-ipadic-utf8")
+# Replace the MeCab initialization with:
+try:
+    mecab = MeCab.Tagger("-Owakati -d /usr/lib/x86_64-linux-gnu/mecab/dic/mecab-ipadic-utf8 -r /usr/local/etc/mecabrc")
+    # Test MeCab is working
+    test_output = mecab.parse("テスト")
+    if not test_output:
+        raise RuntimeError("MeCab returned empty output")
+except Exception as e:
+    print(f"MeCab initialization failed: {str(e)}")
+    # Fallback to system default if custom path fails
+    mecab = MeCab.Tagger("-Owakati")
 
 DICTIONARY_BASE_PATH = os.path.join(os.path.dirname(__file__), "dictionaries")
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "app_config.json")
