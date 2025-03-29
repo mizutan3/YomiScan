@@ -1,3 +1,5 @@
 tesseract-ocr
 tesseract-ocr-jpn
 tesseract-ocr-jpn-vert
+libtesseract-dev
+libleptonica-dev
