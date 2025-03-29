@@ -15,6 +15,7 @@ RUN apt-get update && \
     mecab \
     mecab-ipadic-utf8 \
     libmecab-dev \
+    libmagic1 \
     file && \
     rm -rf /var/lib/apt/lists/*
 
