@@ -28,7 +28,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application
 COPY . .
+# Copy custom tessdata files
+COPY tessdata/* /usr/share/tesseract-ocr/4.00/tessdata/
 
+# Verify files were copied
+RUN ls -la /usr/share/tesseract-ocr/4.00/tessdata/
 # Expose the port the app runs on
 EXPOSE 5000
 
