@@ -18,22 +18,50 @@ import re
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# For Railway deployment
-TESSERACT_PATH = '/usr/local/Tesseract-OCR/tesseract'
-TESSDATA_PATH = '/usr/local/Tesseract-OCR/tessdata'
+# ===== Tesseract Configuration =====
+def configure_tesseract():
+    """Configure Tesseract with multiple fallback options"""
+    # Try system-installed Tesseract first (Debian/Ubuntu)
+    tesseract_paths = [
+        '/usr/bin/tesseract',  # System installation
+        '/usr/local/bin/tesseract',  # Source installation
+        '/usr/share/tesseract-ocr/bin/tesseract'  # Alternative location
+    ]
+    
+    tessdata_paths = [
+        '/usr/share/tesseract-ocr/tessdata',  # Debian/Ubuntu
+        '/usr/local/share/tessdata',  # Source installation
+        '/usr/share/tessdata'  # Alternative location
+    ]
+    
+    # Try all possible combinations
+    for tesseract_cmd in tesseract_paths:
+        for tessdata_prefix in tessdata_paths:
+            try:
+                pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+                os.environ['TESSDATA_PREFIX'] = tessdata_prefix
+                # Verify configuration works
+                langs = pytesseract.get_languages(config='')
+                print(f"Tesseract configured successfully at: {tesseract_cmd}")
+                print(f"TESSDATA_PREFIX: {tessdata_prefix}")
+                print(f"Available languages: {langs}")
+                return True
+            except Exception as e:
+                continue
+    
+    # Final fallback to English only
+    try:
+        pytesseract.pytesseract.tesseract_cmd = 'tesseract'
+        os.environ['TESSDATA_PREFIX'] = ''
+        print("Falling back to English-only Tesseract")
+        return True
+    except Exception as e:
+        print(f"Critical Tesseract error: {str(e)}")
+        return False
 
-# Configure Tesseract with fallback
-try:
-    pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
-    os.environ['TESSDATA_PREFIX'] = TESSDATA_PATH
-    print(f"Tesseract configured at: {TESSERACT_PATH}")
-    print("Available languages:", pytesseract.get_languages(config=''))
-except Exception as e:
-    print(f"Error configuring Tesseract: {str(e)}")
-    # Fallback to system Tesseract if custom installation fails
-    pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
-    os.environ['TESSDATA_PREFIX'] = '/usr/share/tesseract-ocr'
-    print("Falling back to system Tesseract")
+# Initialize Tesseract
+if not configure_tesseract():
+    print("Warning: Tesseract initialization failed. OCR functionality will not work.")
 
 # ===== MeCab Configuration =====
 try:
@@ -44,9 +72,12 @@ except Exception as e:
     mecab = MeCab.Tagger("-Owakati")  # Fallback
     print("Falling back to default MeCab dictionary")
 
+# ===== Application Configuration =====
 VOLUME_BASE = "/app/data"
 DICTIONARY_BASE_PATH = os.path.join(VOLUME_BASE, "dictionaries")
 CONFIG_FILE = os.path.join(VOLUME_BASE, "config", "app_config.json")
+
+# Ensure directories exist
 os.makedirs(DICTIONARY_BASE_PATH, exist_ok=True)
 os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
 
@@ -236,33 +267,58 @@ def segment_words(text: str) -> List[str]:
 
 @app.route("/ocr", methods=["POST"])
 def ocr():
-    data = request.json
-    if "image" not in data:
-        return jsonify({"error": "No image provided"}), 400
+    try:
+        data = request.json
+        if "image" not in data:
+            return jsonify({"error": "No image provided"}), 400
 
-    orientation = data.get("orientation", "horizontal")
+        orientation = data.get("orientation", "horizontal")
+        processed_img = preprocess_image(data["image"])
 
-    processed_img = preprocess_image(data["image"])
+        if orientation == "vertical":
+            custom_config = "--psm 5 -c preserve_interword_spaces=1"
+            lang = "jpn_vert"
+        else:
+            custom_config = "--psm 6 -c preserve_interword_spaces=1"
+            lang = "jpn"
 
-    if orientation == "vertical":
-        custom_config = "--psm 5 -c preserve_interword_spaces=1"
-        lang = "jpn_vert"
-    else:
-        custom_config = "--psm 6 -c preserve_interword_spaces=1"
-        lang = "jpn"
+        # Verify Tesseract is working
+        try:
+            langs = pytesseract.get_languages(config='')
+            if lang not in langs:
+                return jsonify({
+                    "error": f"Language '{lang}' not available",
+                    "available_languages": langs
+                }), 400
+        except Exception as e:
+            return jsonify({
+                "error": f"Tesseract initialization failed: {str(e)}",
+                "tesseract_path": pytesseract.pytesseract.tesseract_cmd,
+                "tessdata_prefix": os.environ.get('TESSDATA_PREFIX', 'not set')
+            }), 500
 
-    extracted_text = pytesseract.image_to_string(
-        processed_img,
-        lang=lang,
-        config=custom_config
-    )
+        extracted_text = pytesseract.image_to_string(
+            processed_img,
+            lang=lang,
+            config=custom_config
+        )
 
-    segmented_text = segment_words(extracted_text)
+        segmented_text = segment_words(extracted_text)
 
-    return jsonify({
-        "text": extracted_text,
-        "words": segmented_text
-    })
+        return jsonify({
+            "text": extracted_text,
+            "words": segmented_text
+        })
+
+    except pytesseract.pytesseract.TesseractError as e:
+        return jsonify({
+            "error": "Tesseract processing failed",
+            "details": str(e),
+            "tesseract_path": pytesseract.pytesseract.tesseract_cmd,
+            "tessdata_prefix": os.environ.get('TESSDATA_PREFIX', 'not set')
+        }), 500
+    except Exception as e:
+        return jsonify({"error": f"OCR processing failed: {str(e)}"}), 500
 
 @app.route("/dictionary", methods=["GET"])
 def dictionary():
