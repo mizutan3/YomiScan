@@ -2,25 +2,32 @@ import os
 import shutil
 import requests
 import tarfile
+from urllib.parse import urlparse
 
 def download_file(url, destination):
     """Download a file from URL to destination"""
     print(f"Downloading {url}...")
-    response = requests.get(url, stream=True)
-    with open(destination, 'wb') as f:
-        shutil.copyfileobj(response.raw, f)
-    print(f"Saved to {destination}")
+    try:
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+        with open(destination, 'wb') as f:
+            shutil.copyfileobj(response.raw, f)
+        print(f"Saved to {destination}")
+        return True
+    except Exception as e:
+        print(f"Failed to download {url}: {str(e)}")
+        return False
 
 def setup_tesseract():
     """Download and setup Tesseract language data"""
-    tessdata_dir = "/app/data/tesseract"
+    tessdata_dir = "/usr/share/tesseract-ocr/5/tessdata"
     os.makedirs(tessdata_dir, exist_ok=True)
     
     # Download Japanese language files
     base_url = "https://github.com/tesseract-ocr/tessdata/raw/main/"
     files = [
         "jpn.traineddata",
-        "jpn_vert.traineddata",
+        "jpn_vert.traineddata"
     ]
     
     for file in files:
@@ -30,25 +37,36 @@ def setup_tesseract():
 
 def setup_mecab():
     """Download and setup MeCab dictionary"""
-    mecab_dir = "/app/data/mecab/ipadic"
+    mecab_dir = "/var/lib/mecab/dic/ipadic-utf8"
     if os.path.exists(mecab_dir):
         return
         
     os.makedirs(mecab_dir, exist_ok=True)
     
-    # Download IPADIC dictionary
+    # Download IPADIC dictionary from direct source
     print("Downloading MeCab IPADIC...")
-    url = "https://drive.google.com/uc?export=download&id=0B4y35FiV1wh7MWVlSDBCSXZMTXM"
+    url = "https://jaist.dl.sourceforge.net/project/mecab/mecab-ipadic/2.7.0-20070801/mecab-ipadic-2.7.0-20070801.tar.gz"
     tar_path = "/tmp/ipadic.tar.gz"
-    download_file(url, tar_path)
     
-    # Extract
-    with tarfile.open(tar_path, 'r:gz') as tar:
-        tar.extractall(path="/app/data/mecab")
-    
-    # Cleanup
-    os.remove(tar_path)
-    print("MeCab IPADIC installed")
+    if download_file(url, tar_path):
+        try:
+            # Extract
+            with tarfile.open(tar_path, 'r:gz') as tar:
+                tar.extractall(path="/var/lib/mecab/dic/")
+            
+            # Move to correct location
+            extracted_dir = "/var/lib/mecab/dic/mecab-ipadic-2.7.0-20070801"
+            if os.path.exists(extracted_dir):
+                for item in os.listdir(extracted_dir):
+                    shutil.move(os.path.join(extracted_dir, item), mecab_dir)
+                os.rmdir(extracted_dir)
+            
+            print("MeCab IPADIC installed")
+        except Exception as e:
+            print(f"Failed to extract MeCab dictionary: {str(e)}")
+        finally:
+            if os.path.exists(tar_path):
+                os.remove(tar_path)
 
 def setup_directories():
     """Ensure required directories exist"""
