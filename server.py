@@ -31,9 +31,10 @@ os.makedirs(TESSDATA_DIR, exist_ok=True)
 
 # Configure Tesseract
 pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
-os.environ["TESSDATA_PREFIX"] = "/usr/share/tesseract-ocr/5"
+os.environ["TESSDATA_PREFIX"] = "/usr/share/tesseract-ocr"
 
-print(f"Tesseract languages available: {pytesseract.get_languages()}")
+print("Tesseract version:", pytesseract.get_tesseract_version())
+print("Available languages:", pytesseract.get_languages(config=''))
 
 # Configure MeCab
 try:
