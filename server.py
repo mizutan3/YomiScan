@@ -33,6 +33,8 @@ os.makedirs(TESSDATA_DIR, exist_ok=True)
 pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 os.environ["TESSDATA_PREFIX"] = "/usr/share/tesseract-ocr/5"
 
+print(f"Tesseract languages available: {pytesseract.get_languages()}")
+
 # Configure MeCab
 try:
     mecab = MeCab.Tagger("-Owakati -d /var/lib/mecab/dic/ipadic-utf8")
