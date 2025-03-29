@@ -1,10 +1,9 @@
-FROM python:3.9-slim
+FROM python:3.12.2
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     tesseract-ocr-jpn \
-    tesseract-ocr-jpn-vert \
     mecab \
     mecab-ipadic-utf8 \
     libmecab-dev \
@@ -14,12 +13,11 @@ RUN apt-get update && apt-get install -y \
 # Create directory structure
 RUN mkdir -p /app/data/{tesseract,mecab,dictionaries,config}
 
-# For Tesseract 5.x on Debian
-RUN mkdir -p /usr/share/tesseract-ocr/5/tessdata \
-    && ln -s /app/data/tesseract /usr/share/tesseract-ocr/5/tessdata/persisted
+# Correct Tesseract symlink (Debian 12 uses /usr/share/tesseract-ocr/5/)
+RUN ln -s /app/data/tesseract /usr/share/tesseract-ocr/5/tessdata
 
-# For MeCab
-RUN ln -s /app/data/mecab /var/lib/mecab/dic/custom
+# Correct MeCab symlink (Debian uses /var/lib/mecab/dic/)
+RUN ln -s /app/data/mecab /var/lib/mecab/dic/ipadic-utf8
 
 WORKDIR /app
 
