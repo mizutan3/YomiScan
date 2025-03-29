@@ -1,41 +1,33 @@
 FROM python:3.12-slim
 
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+ENV TESSDATA_PREFIX /usr/share/tesseract-ocr/4.00/tessdata
+
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
-    wget \
-    unzip \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-jpn \
     tesseract-ocr-jpn-vert \
+    libgl1 \
     mecab \
     mecab-ipadic-utf8 \
     libmecab-dev \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Verify and configure Tesseract
-RUN mkdir -p /usr/share/tesseract-ocr/tessdata && \
-    if [ -d /usr/share/tesseract-ocr/5/tessdata ]; then \
-        cp -r /usr/share/tesseract-ocr/5/tessdata/* /usr/share/tesseract-ocr/tessdata/; \
-    fi && \
-    tesseract --list-langs
-
+# Set working directory
 WORKDIR /app
 
-# Install Python dependencies
+# Copy requirements first to leverage Docker cache
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application
+# Copy the rest of the application
 COPY . .
 
-# Create directories
-RUN mkdir -p /app/data/dictionaries
+# Expose the port the app runs on
+EXPOSE 5000
 
-# Set environment variables
-ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/tessdata
-ENV FLASK_APP=server.py
-
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "server:app"]
+# Command to run the application
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "server:app"]
