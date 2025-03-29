@@ -15,10 +15,8 @@ RUN apt-get update && apt-get install -y \
     libxrender-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Verify Tesseract installation and copy language files
-RUN tesseract --version && \
-    tesseract --list-langs && \
-    mkdir -p /usr/share/tesseract-ocr/tessdata && \
+# Verify and configure Tesseract
+RUN mkdir -p /usr/share/tesseract-ocr/tessdata && \
     if [ -d /usr/share/tesseract-ocr/5/tessdata ]; then \
         cp -r /usr/share/tesseract-ocr/5/tessdata/* /usr/share/tesseract-ocr/tessdata/; \
     fi && \
@@ -38,5 +36,6 @@ RUN mkdir -p /app/data/dictionaries
 
 # Set environment variables
 ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/tessdata
+ENV FLASK_APP=server.py
 
 CMD ["gunicorn", "--bind", "0.0.0.0:8080", "server:app"]
