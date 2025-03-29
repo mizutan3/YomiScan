@@ -21,43 +21,61 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 # ===== Tesseract Configuration =====
 def configure_tesseract():
     """Configure Tesseract with multiple fallback options"""
-    # Try system-installed Tesseract first (Debian/Ubuntu)
-    tesseract_paths = [
-        '/usr/bin/tesseract',  # System installation
-        '/usr/local/bin/tesseract',  # Source installation
-        '/usr/share/tesseract-ocr/bin/tesseract'  # Alternative location
+    # Common paths to check
+    paths_to_check = [
+        # Debian/Ubuntu default locations
+        ('/usr/bin/tesseract', '/usr/share/tesseract-ocr/4.00/tessdata'),
+        ('/usr/bin/tesseract', '/usr/share/tesseract-ocr/tessdata'),
+        # Source installation locations
+        ('/usr/local/bin/tesseract', '/usr/local/share/tessdata'),
+        # Windows-style fallback (if using custom install)
+        ('/usr/local/Tesseract-OCR/tesseract', '/usr/local/Tesseract-OCR/tessdata')
     ]
     
-    tessdata_paths = [
-        '/usr/share/tesseract-ocr/tessdata',  # Debian/Ubuntu
-        '/usr/local/share/tessdata',  # Source installation
-        '/usr/share/tessdata'  # Alternative location
-    ]
-    
-    # Try all possible combinations
-    for tesseract_cmd in tesseract_paths:
-        for tessdata_prefix in tessdata_paths:
-            try:
-                pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
-                os.environ['TESSDATA_PREFIX'] = tessdata_prefix
-                # Verify configuration works
+    for tesseract_cmd, tessdata_prefix in paths_to_check:
+        try:
+            pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+            os.environ['TESSDATA_PREFIX'] = tessdata_prefix
+            langs = pytesseract.get_languages(config='')
+            print(f"Tesseract configured at: {tesseract_cmd}")
+            print(f"TESSDATA_PREFIX: {tessdata_prefix}")
+            print(f"Available languages: {langs}")
+            
+            # Verify Japanese is available
+            if 'jpn' not in langs:
+                print("Warning: Japanese language not found. Installing manually...")
+                install_japanese_manually(tessdata_prefix)
                 langs = pytesseract.get_languages(config='')
-                print(f"Tesseract configured successfully at: {tesseract_cmd}")
-                print(f"TESSDATA_PREFIX: {tessdata_prefix}")
-                print(f"Available languages: {langs}")
-                return True
-            except Exception as e:
-                continue
+                print(f"Available languages after manual install: {langs}")
+            
+            return True
+        except Exception as e:
+            continue
     
-    # Final fallback to English only
-    try:
-        pytesseract.pytesseract.tesseract_cmd = 'tesseract'
-        os.environ['TESSDATA_PREFIX'] = ''
-        print("Falling back to English-only Tesseract")
-        return True
-    except Exception as e:
-        print(f"Critical Tesseract error: {str(e)}")
-        return False
+    print("Error: Could not configure Tesseract")
+    return False
+
+def install_japanese_manually(tessdata_dir):
+    """Manually install Japanese language files if missing"""
+    os.makedirs(tessdata_dir, exist_ok=True)
+    base_url = "https://github.com/tesseract-ocr/tessdata/raw/main/"
+    
+    files = {
+        "jpn.traineddata": base_url + "jpn.traineddata",
+        "jpn_vert.traineddata": base_url + "jpn_vert.traineddata"
+    }
+    
+    for filename, url in files.items():
+        dest = os.path.join(tessdata_dir, filename)
+        if not os.path.exists(dest):
+            try:
+                import requests
+                print(f"Downloading {filename}...")
+                r = requests.get(url, allow_redirects=True)
+                with open(dest, 'wb') as f:
+                    f.write(r.content)
+            except Exception as e:
+                print(f"Failed to download {filename}: {str(e)}")
 
 # Initialize Tesseract
 if not configure_tesseract():
