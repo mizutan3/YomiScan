@@ -14,7 +14,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     mecab \
     mecab-ipadic-utf8 \
     libmecab-dev \
-    libmagic1 \  # This is the critical addition
     file \       # Provides the magic.h header
     && rm -rf /var/lib/apt/lists/*
 
