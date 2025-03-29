@@ -268,57 +268,84 @@ def segment_words(text: str) -> List[str]:
 @app.route("/ocr", methods=["POST"])
 def ocr():
     try:
-        data = request.json
-        if "image" not in data:
-            return jsonify({"error": "No image provided"}), 400
+        # Validate request content type
+        if not request.is_json:
+            return jsonify({
+                "error": "Invalid content type",
+                "required": "application/json",
+                "received": request.content_type
+            }), 400
+
+        data = request.get_json()
+        
+        # Validate required fields
+        if not data or "image" not in data:
+            return jsonify({
+                "error": "Missing required field",
+                "required_fields": ["image"],
+                "optional_fields": ["orientation"]
+            }), 400
+
+        # Validate image data
+        if not isinstance(data["image"], str) or not data["image"].strip():
+            return jsonify({
+                "error": "Invalid image data",
+                "details": "Base64 encoded string expected"
+            }), 400
 
         orientation = data.get("orientation", "horizontal")
-        processed_img = preprocess_image(data["image"])
+        if orientation not in ["horizontal", "vertical"]:
+            return jsonify({
+                "error": "Invalid orientation",
+                "valid_values": ["horizontal", "vertical"]
+            }), 400
 
-        if orientation == "vertical":
-            custom_config = "--psm 5 -c preserve_interword_spaces=1"
-            lang = "jpn_vert"
-        else:
-            custom_config = "--psm 6 -c preserve_interword_spaces=1"
-            lang = "jpn"
-
-        # Verify Tesseract is working
         try:
-            langs = pytesseract.get_languages(config='')
-            if lang not in langs:
-                return jsonify({
-                    "error": f"Language '{lang}' not available",
-                    "available_languages": langs
-                }), 400
+            # Process the image
+            processed_img = preprocess_image(data["image"])
+            
+            # Configure OCR parameters
+            config = {
+                "horizontal": ("--psm 6 -c preserve_interword_spaces=1", "jpn"),
+                "vertical": ("--psm 5 -c preserve_interword_spaces=1", "jpn_vert")
+            }[orientation]
+            
+            # Perform OCR
+            extracted_text = pytesseract.image_to_string(
+                processed_img,
+                lang=config[1],
+                config=config[0]
+            )
+            
+            # Segment words
+            segmented_text = segment_words(extracted_text)
+
+            return jsonify({
+                "status": "success",
+                "text": extracted_text,
+                "words": segmented_text,
+                "orientation": orientation
+            })
+
+        except pytesseract.pytesseract.TesseractError as e:
+            return jsonify({
+                "error": "OCR processing failed",
+                "details": str(e),
+                "tesseract_path": pytesseract.pytesseract.tesseract_cmd,
+                "available_languages": pytesseract.get_languages(config='')
+            }), 500
+            
         except Exception as e:
             return jsonify({
-                "error": f"Tesseract initialization failed: {str(e)}",
-                "tesseract_path": pytesseract.pytesseract.tesseract_cmd,
-                "tessdata_prefix": os.environ.get('TESSDATA_PREFIX', 'not set')
-            }), 500
+                "error": "Image processing failed",
+                "details": str(e)
+            }), 400
 
-        extracted_text = pytesseract.image_to_string(
-            processed_img,
-            lang=lang,
-            config=custom_config
-        )
-
-        segmented_text = segment_words(extracted_text)
-
-        return jsonify({
-            "text": extracted_text,
-            "words": segmented_text
-        })
-
-    except pytesseract.pytesseract.TesseractError as e:
-        return jsonify({
-            "error": "Tesseract processing failed",
-            "details": str(e),
-            "tesseract_path": pytesseract.pytesseract.tesseract_cmd,
-            "tessdata_prefix": os.environ.get('TESSDATA_PREFIX', 'not set')
-        }), 500
     except Exception as e:
-        return jsonify({"error": f"OCR processing failed: {str(e)}"}), 500
+        return jsonify({
+            "error": "Invalid request format",
+            "details": str(e)
+        }), 400
 
 @app.route("/dictionary", methods=["GET"])
 def dictionary():
