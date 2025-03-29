@@ -1,12 +1,12 @@
 FROM python:3.12-slim
 
-# Install system dependencies with explicit versions
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     wget \
     unzip \
-    tesseract-ocr=5.3.0-2 \
-    tesseract-ocr-jpn=1:5.3.0-2 \
-    tesseract-ocr-jpn-vert=1:5.3.0-2 \
+    tesseract-ocr \
+    tesseract-ocr-jpn \
+    tesseract-ocr-jpn-vert \
     mecab \
     mecab-ipadic-utf8 \
     libmecab-dev \
@@ -15,10 +15,13 @@ RUN apt-get update && apt-get install -y \
     libxrender-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Manually verify and fix language file locations
-RUN mkdir -p /usr/share/tesseract-ocr/tessdata && \
-    cp /usr/share/tesseract-ocr/5/tessdata/* /usr/share/tesseract-ocr/tessdata/ && \
-    tesseract --list-langs
+# Verify Tesseract installation and language files
+RUN tesseract --version && \
+    tesseract --list-langs && \
+    mkdir -p /usr/share/tesseract-ocr/tessdata && \
+    if [ -d /usr/share/tesseract-ocr/5/tessdata ]; then \
+        cp /usr/share/tesseract-ocr/5/tessdata/* /usr/share/tesseract-ocr/tessdata/; \
+    fi
 
 WORKDIR /app
 
