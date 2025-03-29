@@ -4,6 +4,9 @@ FROM python:3.12.2
 RUN apt-get update && apt-get install -y \
     wget \
     unzip \
+    tesseract-ocr \
+    tesseract-ocr-jpn \
+    tesseract-ocr-jpn-vert \
     mecab \
     mecab-ipadic-utf8 \
     libmecab-dev \
@@ -12,13 +15,13 @@ RUN apt-get update && apt-get install -y \
     libxrender-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Download Tesseract from GitHub Releases (replace with your actual URL)
-RUN wget https://github.com/tesseract-ocr/tessdata/raw/main/jpn.traineddata -O /usr/local/share/tessdata/jpn.traineddata \
-    && wget https://github.com/tesseract-ocr/tessdata/raw/main/jpn_vert.traineddata -O /usr/local/share/tessdata/jpn_vert.traineddata
+# Create tessdata directory and download language files
+RUN mkdir -p /usr/share/tesseract-ocr/tessdata \
+    && wget https://github.com/tesseract-ocr/tessdata/raw/main/jpn.traineddata -O /usr/share/tesseract-ocr/tessdata/jpn.traineddata \
+    && wget https://github.com/tesseract-ocr/tessdata/raw/main/jpn_vert.traineddata -O /usr/share/tesseract-ocr/tessdata/jpn_vert.traineddata
 
 # Set environment variables
-ENV TESSDATA_PREFIX=/usr/local/Tesseract-OCR/tessdata
-ENV PATH="/usr/local/Tesseract-OCR:${PATH}"
+ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/tessdata
 
 WORKDIR /app
 
