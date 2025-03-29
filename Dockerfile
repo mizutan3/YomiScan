@@ -9,6 +9,9 @@ RUN apt-get update && apt-get install -y \
     libmecab-dev \
     && rm -rf /var/lib/apt/lists/*
 
+COPY setup_tessdata.sh .
+RUN chmod +x setup_tessdata.sh && ./setup_tessdata.sh
+
 # Set working directory
 WORKDIR /app
 
