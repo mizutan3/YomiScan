@@ -15,13 +15,10 @@ RUN apt-get update && apt-get install -y \
     libxrender-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Create tessdata directory and download language files
+# Create tessdata directory and verify installation
 RUN mkdir -p /usr/share/tesseract-ocr/tessdata \
-    && wget https://github.com/tesseract-ocr/tessdata/raw/main/jpn.traineddata -O /usr/share/tesseract-ocr/tessdata/jpn.traineddata \
-    && wget https://github.com/tesseract-ocr/tessdata/raw/main/jpn_vert.traineddata -O /usr/share/tesseract-ocr/tessdata/jpn_vert.traineddata
-
-# Set environment variables
-ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/tessdata
+    && tesseract --version \
+    && tesseract --list-langs
 
 WORKDIR /app
 
@@ -34,5 +31,8 @@ COPY . .
 
 # Create directories
 RUN mkdir -p /app/data/dictionaries
+
+# Set environment variables
+ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/tessdata
 
 CMD ["gunicorn", "--bind", "0.0.0.0:8080", "server:app"]
