@@ -27,13 +27,18 @@ def setup_tesseract():
     base_url = "https://github.com/tesseract-ocr/tessdata/raw/main/"
     files = [
         "jpn.traineddata",
-        "jpn_vert.traineddata"
+        "jpn_vert.traineddata",
+        "eng.traineddata"  # Optional
     ]
     
     for file in files:
         dest = os.path.join(tessdata_dir, file)
         if not os.path.exists(dest):
             download_file(base_url + file, dest)
+    
+    # Verify installation
+    if not os.path.exists(os.path.join(tessdata_dir, "jpn.traineddata")):
+        raise Exception("Japanese Tesseract data not installed!")
 
 def setup_mecab():
     """Download and setup MeCab dictionary"""
