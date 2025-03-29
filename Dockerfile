@@ -1,3 +1,5 @@
+FROM python:3.12.2
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     wget \
