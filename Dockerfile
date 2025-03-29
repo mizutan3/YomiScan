@@ -26,4 +26,7 @@ COPY . .
 # Install Python deps
 RUN pip install -r requirements.txt
 
+COPY preload_assets.py .
+RUN python preload_assets.py
+
 CMD ["python", "app.py"]
