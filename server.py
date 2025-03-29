@@ -20,44 +20,29 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 
 # ===== Tesseract Configuration =====
 def configure_tesseract():
-    """Configure Tesseract with multiple fallback options"""
-    # Try system-installed Tesseract first (Debian/Ubuntu)
-    tesseract_paths = [
-        '/usr/bin/tesseract',  # System installation
-        '/usr/local/bin/tesseract',  # Source installation
-        '/usr/share/tesseract-ocr/bin/tesseract'  # Alternative location
+    # Try standard Debian locations first
+    paths_to_try = [
+        ('/usr/bin/tesseract', '/usr/share/tesseract-ocr/tessdata'),
+        ('/usr/bin/tesseract', '/usr/share/tesseract-ocr/5/tessdata'),
+        ('/usr/bin/tesseract', '/usr/share/tessdata'),
     ]
     
-    tessdata_paths = [
-        '/usr/share/tesseract-ocr/tessdata',  # Debian/Ubuntu
-        '/usr/local/share/tessdata',  # Source installation
-        '/usr/share/tessdata'  # Alternative location
-    ]
-    
-    # Try all possible combinations
-    for tesseract_cmd in tesseract_paths:
-        for tessdata_prefix in tessdata_paths:
-            try:
-                pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
-                os.environ['TESSDATA_PREFIX'] = tessdata_prefix
-                # Verify configuration works
-                langs = pytesseract.get_languages(config='')
-                print(f"Tesseract configured successfully at: {tesseract_cmd}")
-                print(f"TESSDATA_PREFIX: {tessdata_prefix}")
+    for tesseract_cmd, tessdata_path in paths_to_try:
+        try:
+            pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+            os.environ['TESSDATA_PREFIX'] = tessdata_path
+            # Force a language check
+            langs = pytesseract.get_languages(config='')
+            if 'jpn' in langs and 'jpn_vert' in langs:
+                print(f"Successfully configured Tesseract at {tesseract_cmd}")
+                print(f"Language files found at {tessdata_path}")
                 print(f"Available languages: {langs}")
                 return True
-            except Exception as e:
-                continue
+        except Exception:
+            continue
     
-    # Final fallback to English only
-    try:
-        pytesseract.pytesseract.tesseract_cmd = 'tesseract'
-        os.environ['TESSDATA_PREFIX'] = ''
-        print("Falling back to English-only Tesseract")
-        return True
-    except Exception as e:
-        print(f"Critical Tesseract error: {str(e)}")
-        return False
+    print("ERROR: Japanese language files not found in any standard location!")
+    return False
 
 # Initialize Tesseract
 if not configure_tesseract():
