@@ -18,32 +18,38 @@ import re
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Persistent storage paths
+# For Railway deployment
+TESSERACT_PATH = '/usr/local/Tesseract-OCR/tesseract'
+TESSDATA_PATH = '/usr/local/Tesseract-OCR/tessdata'
+
+# Configure Tesseract with fallback
+try:
+    pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
+    os.environ['TESSDATA_PREFIX'] = TESSDATA_PATH
+    print(f"Tesseract configured at: {TESSERACT_PATH}")
+    print("Available languages:", pytesseract.get_languages(config=''))
+except Exception as e:
+    print(f"Error configuring Tesseract: {str(e)}")
+    # Fallback to system Tesseract if custom installation fails
+    pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
+    os.environ['TESSDATA_PREFIX'] = '/usr/share/tesseract-ocr'
+    print("Falling back to system Tesseract")
+
+# ===== MeCab Configuration =====
+try:
+    mecab = MeCab.Tagger("-Owakati -d /var/lib/mecab/dic/ipadic-utf8")
+    print("MeCab initialized with IPADIC dictionary")
+except Exception as e:
+    print(f"Error initializing MeCab with IPADIC: {str(e)}")
+    mecab = MeCab.Tagger("-Owakati")  # Fallback
+    print("Falling back to default MeCab dictionary")
+
 VOLUME_BASE = "/app/data"
 DICTIONARY_BASE_PATH = os.path.join(VOLUME_BASE, "dictionaries")
 CONFIG_FILE = os.path.join(VOLUME_BASE, "config", "app_config.json")
-TESSDATA_DIR = "/usr/share/tesseract-ocr/5/tessdata"
-
-# Ensure directories exist
 os.makedirs(DICTIONARY_BASE_PATH, exist_ok=True)
 os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
-os.makedirs(TESSDATA_DIR, exist_ok=True)
 
-# Configure Tesseract
-pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
-os.environ["TESSDATA_PREFIX"] = "/usr/share/tesseract-ocr"
-
-print("Tesseract version:", pytesseract.get_tesseract_version())
-print("Available languages:", pytesseract.get_languages(config=''))
-
-# Configure MeCab
-try:
-    mecab = MeCab.Tagger("-Owakati -d /var/lib/mecab/dic/ipadic-utf8")
-except Exception as e:
-    print(f"MeCab initialization error: {str(e)}")
-    mecab = MeCab.Tagger("-Owakati")
-
-# Dictionary management variables
 dictionary_map: Dict[str, Dict[str, List[Dict]]] = {}
 active_dictionaries: Set[str] = set()
 dictionary_order: List[str] = []
