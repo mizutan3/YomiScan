@@ -1,24 +1,26 @@
-FROM python:3.12.2
+FROM python:3.9-slim
 
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
-    tesseract-ocr \
-    tesseract-ocr-jpn \
-    tesseract-ocr-jpn-vert \
+    wget \
+    unzip \
     mecab \
     mecab-ipadic-utf8 \
     libmecab-dev \
-    wget \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Create directories
-RUN mkdir -p /app/data/{dictionaries,config} \
-    && mkdir -p /usr/share/tesseract-ocr/tessdata
+# Download and install Tesseract from your Google Drive
+RUN wget --no-check-certificate \
+    "https://drive.google.com/uc?export=download&id=16XzYxhja-m9zduZPA25QpIZUVt_hwExm" -O tesseract-files.zip \
+    && unzip tesseract-files.zip -d /usr/local/ \
+    && rm tesseract-files.zip
 
-# Install language data
-RUN wget -O /usr/share/tesseract-ocr/tessdata/jpn.traineddata \
-    https://github.com/tesseract-ocr/tessdata/raw/main/jpn.traineddata \
-    && wget -O /usr/share/tesseract-ocr/tessdata/jpn_vert.traineddata \
-    https://github.com/tesseract-ocr/tessdata/raw/main/jpn_vert.traineddata
+# Set environment variables
+ENV TESSDATA_PREFIX=/usr/local/Tesseract-OCR/tessdata
+ENV PATH="/usr/local/Tesseract-OCR:${PATH}"
 
 WORKDIR /app
 
@@ -29,7 +31,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application
 COPY . .
 
-# Set environment variables
-ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr
+# Create directories
+RUN mkdir -p /app/data/dictionaries
 
 CMD ["gunicorn", "--bind", "0.0.0.0:8080", "server:app"]
