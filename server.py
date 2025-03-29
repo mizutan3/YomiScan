@@ -18,25 +18,26 @@ import re
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Persistent storage paths (Railway volume)
+# Persistent storage paths
 VOLUME_BASE = "/app/data"
-DICTIONARY_BASE_PATH = os.path.join(DATA_DIR, "dictionaries")
+DICTIONARY_BASE_PATH = os.path.join(VOLUME_BASE, "dictionaries")
 CONFIG_FILE = os.path.join(VOLUME_BASE, "config", "app_config.json")
-TESSDATA_DIR = os.path.join(VOLUME_BASE, "tesseract")
+TESSDATA_DIR = "/usr/share/tesseract-ocr/5/tessdata"
 
-# Create directories if they don't exist
+# Ensure directories exist
 os.makedirs(DICTIONARY_BASE_PATH, exist_ok=True)
-os.makedirs(TESSDATA_DIR, exist_ok=True)
 os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+os.makedirs(TESSDATA_DIR, exist_ok=True)
 
-# Tesseract config (Linux-compatible)
+# Configure Tesseract
 pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
-os.environ["TESSDATA_PREFIX"] = TESSDATA_DIR
+os.environ["TESSDATA_PREFIX"] = "/usr/share/tesseract-ocr/5"
 
+# Configure MeCab
 try:
-    mecab = MeCab.Tagger("-Owakati -d /usr/lib/x86_64-linux-gnu/mecab/dic/ipadic")
-except:
-    # Fallback if custom dictionary not available
+    mecab = MeCab.Tagger("-Owakati -d /var/lib/mecab/dic/ipadic-utf8")
+except Exception as e:
+    print(f"MeCab initialization error: {str(e)}")
     mecab = MeCab.Tagger("-Owakati")
 
 # Dictionary management variables
