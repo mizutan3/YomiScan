@@ -29,6 +29,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY preload_assets.py .
 RUN python preload_assets.py
 
+RUN ls -la /usr/share/tesseract-ocr/5/tessdata/ && \
+    echo "TESSDATA_PREFIX=$TESSDATA_PREFIX" && \
+    tesseract --list-langs
+
 # Copy application code
 COPY . .
 
