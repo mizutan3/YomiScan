@@ -1,23 +1,24 @@
 FROM python:3.12.2
 
-# Install system dependencies
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     tesseract-ocr-jpn \
+    tesseract-ocr-jpn-vert \
     mecab \
     mecab-ipadic-utf8 \
     libmecab-dev \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Create directory structure
-RUN mkdir -p /app/data/{tesseract,mecab,dictionaries,config}
+# Create directories
+RUN mkdir -p /app/data/{dictionaries,config} \
+    && mkdir -p /usr/share/tesseract-ocr/tessdata
 
-# Correct Tesseract symlink (Debian 12 uses /usr/share/tesseract-ocr/5/)
-RUN ln -s /app/data/tesseract /usr/share/tesseract-ocr/5/tessdata
-
-# Correct MeCab symlink (Debian uses /var/lib/mecab/dic/)
-RUN ln -s /app/data/mecab /var/lib/mecab/dic/ipadic-utf8
+# Install language data
+RUN wget -O /usr/share/tesseract-ocr/tessdata/jpn.traineddata \
+    https://github.com/tesseract-ocr/tessdata/raw/main/jpn.traineddata \
+    && wget -O /usr/share/tesseract-ocr/tessdata/jpn_vert.traineddata \
+    https://github.com/tesseract-ocr/tessdata/raw/main/jpn_vert.traineddata
 
 WORKDIR /app
 
@@ -25,15 +26,10 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Preload assets
-COPY preload_assets.py .
-RUN python preload_assets.py
-
-RUN ls -la /usr/share/tesseract-ocr/5/tessdata/ && \
-    echo "TESSDATA_PREFIX=$TESSDATA_PREFIX" && \
-    tesseract --list-langs
-
-# Copy application code
+# Copy application
 COPY . .
 
-CMD ["python", "server.py"]
+# Set environment variables
+ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr
+
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "server:app"]
