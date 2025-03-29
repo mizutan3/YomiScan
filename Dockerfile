@@ -1,32 +1,34 @@
 FROM python:3.12.2
 
-# Install system deps
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
-    tesseract-ocr-jpn \
     mecab \
     mecab-ipadic-utf8 \
     libmecab-dev \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Create directories for volume
-RUN mkdir -p /app/data/tesseract \
-    && mkdir -p /app/data/mecab \
-    && mkdir -p /app/data/dictionaries
+# Create directory structure
+RUN mkdir -p /app/data/{tesseract,mecab,dictionaries,config}
 
-# Symlink Tesseract data to volume
+# Symlink Tesseract data to our persistent volume
 RUN ln -s /app/data/tesseract /usr/share/tesseract-ocr/4.00/tessdata
 
-# Symlink Mecab dictionary to volume
+# Symlink MeCab dictionary
 RUN ln -s /app/data/mecab /usr/lib/x86_64-linux-gnu/mecab/dic
 
 WORKDIR /app
-COPY . .
 
-# Install Python deps
-RUN pip install -r requirements.txt
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
+# Preload assets
 COPY preload_assets.py .
 RUN python preload_assets.py
 
-CMD ["python", "app.py"]
+# Copy application code
+COPY . .
+
+CMD ["python", "server.py"]
