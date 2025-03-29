@@ -18,53 +18,24 @@ import re
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-#pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
-os.environ['TESSDATA_PREFIX'] = '/usr/share/tesseract-ocr/4.00/tessdata/'
+# Tesseract config (Linux-compatible)
+pytesseract.pytesseract.tesseract_cmd = 'tesseract'
 
-#mecab = MeCab.Tagger("-Owakati")
-#mecab = MeCab.Tagger("-Owakati -d /usr/lib/x86_64-linux-gnu/mecab/dic/mecab-ipadic-utf8")
-MECAB_DICT_PATHS = [
-    # 1. First try project-local dictionary
-    os.path.join(os.path.dirname(__file__), "mecab/dic/ipadic"),
-    # 2. Try system-installed dictionary
-    "/usr/lib/x86_64-linux-gnu/mecab/dic/mecab-ipadic-utf8",
-    # 3. Try unidic-lite fallback
-    None  # Will be set if unidic-lite is available
-]
+# MeCab config
+mecab = MeCab.Tagger("-Owakati")
 
-MECABRC_PATH = os.path.join(os.path.dirname(__file__), "mecab/etc/mecabrc")
+# Persistent storage paths (Railway volume)
+DATA_DIR = "/app/data"
+DICTIONARY_BASE_PATH = os.path.join(DATA_DIR, "dictionaries")
+CONFIG_FILE = os.path.join(DATA_DIR, "app_config.json")
+TESSDATA_DIR = os.path.join(DATA_DIR, "tessdata")
 
-mecab = None
-last_error = None
-
-for dict_path in MECAB_DICT_PATHS:
-    try:
-        if dict_path is None:
-            # Try unidic-lite fallback
-            import unidic_lite
-            dict_path = os.path.join(unidic_lite.__path__[0], "dicdir")
-        
-        mecab = MeCab.Tagger(f"-Owakati -r {MECABRC_PATH} -d {dict_path}")
-        test_output = mecab.parse("テスト")
-        if test_output.strip():
-            print(f"Successfully initialized MeCab with dictionary at {dict_path}")
-            break
-        else:
-            raise RuntimeError("MeCab returned empty output")
-    except Exception as e:
-        last_error = str(e)
-        print(f"MeCab initialization failed with dictionary at {dict_path}: {last_error}")
-        mecab = None
-
-if mecab is None:
-    print("Warning: Falling back to simple whitespace tokenizer")
-    print(f"Last MeCab error: {last_error}")
-
-DICTIONARY_BASE_PATH = os.path.join(os.path.dirname(__file__), "dictionaries")
-CONFIG_FILE = os.path.join(os.path.dirname(__file__), "app_config.json")
+# Create directories if they don't exist
 os.makedirs(DICTIONARY_BASE_PATH, exist_ok=True)
+os.makedirs(TESSDATA_DIR, exist_ok=True)
+os.environ['TESSDATA_PREFIX'] = TESSDATA_DIR
 
+# Dictionary management variables
 dictionary_map: Dict[str, Dict[str, List[Dict]]] = {}
 active_dictionaries: Set[str] = set()
 dictionary_order: List[str] = []
@@ -245,16 +216,6 @@ def preprocess_image(image_data: str) -> np.ndarray:
 def segment_words(text: str) -> List[str]:
     if not text.strip():
         return []
-    
-    if mecab is None:
-        # Fallback tokenization when MeCab fails
-        return [w for w in text.split() if w.strip()]
-    
-    try:
-        words = mecab.parse(text).strip().split()
-        return [w for w in words if w.strip()]
-    except:
-        return [w for w in text.split() if w.strip()]
 
     words = mecab.parse(text).strip().split()
     return [w for w in words if w.strip()]
