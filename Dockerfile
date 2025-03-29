@@ -1,5 +1,4 @@
-# Use Python 3.9 base image
-FROM python:3.9-slim
+FROM python:3.12.2
 
 # Install system dependencies (Tesseract + MeCab)
 RUN apt-get update && apt-get install -y \
@@ -21,4 +20,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Run Flask
-CMD ["python", "app.py"]
+CMD ["python", "server.py"]
