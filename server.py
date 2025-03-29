@@ -14,58 +14,17 @@ from typing import Dict, List, Set
 from werkzeug.utils import secure_filename
 import magic
 import re
-import traceback
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# ===== Tesseract Configuration =====
-def configure_tesseract():
-    # Try standard Debian locations first
-    paths_to_try = [
-        ('/usr/bin/tesseract', '/usr/share/tesseract-ocr/tessdata'),
-        ('/usr/bin/tesseract', '/usr/share/tesseract-ocr/5/tessdata'),
-        ('/usr/bin/tesseract', '/usr/share/tessdata'),
-    ]
-    
-    for tesseract_cmd, tessdata_path in paths_to_try:
-        try:
-            pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
-            os.environ['TESSDATA_PREFIX'] = tessdata_path
-            # Force a language check
-            langs = pytesseract.get_languages(config='')
-            if 'jpn' in langs and 'jpn_vert' in langs:
-                print(f"Successfully configured Tesseract at {tesseract_cmd}")
-                print(f"Language files found at {tessdata_path}")
-                print(f"Available languages: {langs}")
-                return True
-        except Exception:
-            continue
-    
-    print("ERROR: Japanese language files not found in any standard location!")
-    return False
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
-# Initialize Tesseract
-if not configure_tesseract():
-    print("Warning: Tesseract initialization failed. OCR functionality will not work.")
+mecab = MeCab.Tagger("-Owakati")
 
-# ===== MeCab Configuration =====
-try:
-    mecab = MeCab.Tagger("-Owakati -d /var/lib/mecab/dic/ipadic-utf8")
-    print("MeCab initialized with IPADIC dictionary")
-except Exception as e:
-    print(f"Error initializing MeCab with IPADIC: {str(e)}")
-    mecab = MeCab.Tagger("-Owakati")  # Fallback
-    print("Falling back to default MeCab dictionary")
-
-# ===== Application Configuration =====
-VOLUME_BASE = "/app/data"
-DICTIONARY_BASE_PATH = os.path.join(VOLUME_BASE, "dictionaries")
-CONFIG_FILE = os.path.join(VOLUME_BASE, "config", "app_config.json")
-
-# Ensure directories exist
+DICTIONARY_BASE_PATH = os.path.join(os.path.dirname(__file__), "dictionaries")
+CONFIG_FILE = os.path.join(os.path.dirname(__file__), "app_config.json")
 os.makedirs(DICTIONARY_BASE_PATH, exist_ok=True)
-os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
 
 dictionary_map: Dict[str, Dict[str, List[Dict]]] = {}
 active_dictionaries: Set[str] = set()
@@ -253,146 +212,33 @@ def segment_words(text: str) -> List[str]:
 
 @app.route("/ocr", methods=["POST"])
 def ocr():
-try:
-        # ===== Request Validation =====
-        if not request.is_json:
-            return jsonify({
-                "error": "Invalid content type",
-                "required": "application/json",
-                "received": request.content_type or "unknown"
-            }), 400
+    data = request.json
+    if "image" not in data:
+        return jsonify({"error": "No image provided"}), 400
 
-        data = request.get_json(silent=True)
-        if data is None:
-            return jsonify({
-                "error": "Invalid JSON payload",
-                "details": "Failed to parse request body as JSON"
-            }), 400
+    orientation = data.get("orientation", "horizontal")
 
-        # Validate required image field
-        if "image" not in data or not isinstance(data["image"], str):
-            return jsonify({
-                "error": "Missing or invalid image data",
-                "required": "Base64 encoded image string",
-                "received": type(data.get("image")).__name__
-            }), 400
+    processed_img = preprocess_image(data["image"])
 
-        # Validate orientation
-        orientation = data.get("orientation", "horizontal")
-        if orientation not in ["horizontal", "vertical"]:
-            return jsonify({
-                "error": "Invalid orientation value",
-                "valid_values": ["horizontal", "vertical"],
-                "received": orientation
-            }), 400
+    if orientation == "vertical":
+        custom_config = "--psm 5 -c preserve_interword_spaces=1"
+        lang = "jpn_vert"
+    else:
+        custom_config = "--psm 6 -c preserve_interword_spaces=1"
+        lang = "jpn"
 
-        # ===== Tesseract Verification =====
-        try:
-            available_langs = pytesseract.get_languages(config='')
-            required_lang = "jpn_vert" if orientation == "vertical" else "jpn"
-            
-            if required_lang not in available_langs:
-                return jsonify({
-                    "error": "Required language not available",
-                    "required": required_lang,
-                    "available_languages": available_langs,
-                    "tesseract_path": pytesseract.pytesseract.tesseract_cmd,
-                    "tessdata_prefix": os.environ.get('TESSDATA_PREFIX')
-                }), 500
-        except Exception as e:
-            return jsonify({
-                "error": "Tesseract language check failed",
-                "details": str(e),
-                "tesseract_status": {
-                    "installed": shutil.which(pytesseract.pytesseract.tesseract_cmd) is not None,
-                    "path": pytesseract.pytesseract.tesseract_cmd,
-                    "tessdata": os.environ.get('TESSDATA_PREFIX')
-                }
-            }), 500
+    extracted_text = pytesseract.image_to_string(
+        processed_img,
+        lang=lang,
+        config=custom_config
+    )
 
-        # ===== Image Processing =====
-        try:
-            # Decode base64 image
-            try:
-                image_bytes = base64.b64decode(data["image"])
-                nparr = np.frombuffer(image_bytes, np.uint8)
-                img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                
-                if img is None:
-                    raise ValueError("Failed to decode image - invalid format")
-            except Exception as e:
-                return jsonify({
-                    "error": "Image decoding failed",
-                    "details": str(e),
-                    "expected_format": "Valid base64 encoded image (JPEG/PNG)"
-                }), 400
+    segmented_text = segment_words(extracted_text)
 
-            # Preprocess image
-            try:
-                processed_img = preprocess_image(data["image"])
-            except Exception as e:
-                return jsonify({
-                    "error": "Image preprocessing failed",
-                    "details": str(e)
-                }), 400
-
-            # ===== OCR Processing =====
-            ocr_config = {
-                "horizontal": ("--psm 6 -c preserve_interword_spaces=1", "jpn"),
-                "vertical": ("--psm 5 -c preserve_interword_spaces=1", "jpn_vert")
-            }[orientation]
-
-            try:
-                extracted_text = pytesseract.image_to_string(
-                    processed_img,
-                    lang=ocr_config[1],
-                    config=ocr_config[0]
-                ).strip()
-            except pytesseract.TesseractError as e:
-                return jsonify({
-                    "error": "OCR processing failed",
-                    "details": str(e),
-                    "tesseract_command": f"tesseract {ocr_config[0]} -l {ocr_config[1]}"
-                }), 500
-
-            # ===== Text Processing =====
-            try:
-                segmented_text = segment_words(extracted_text)
-            except Exception as e:
-                return jsonify({
-                    "error": "Text segmentation failed",
-                    "details": str(e),
-                    "raw_text": extracted_text
-                }), 500
-
-            # ===== Success Response =====
-            return jsonify({
-                "status": "success",
-                "text": extracted_text,
-                "words": segmented_text,
-                "orientation": orientation,
-                "language": ocr_config[1],
-                "processing_steps": {
-                    "image_decoding": "success",
-                    "preprocessing": "success",
-                    "ocr": "success",
-                    "segmentation": "success"
-                }
-            })
-
-        except Exception as e:
-            return jsonify({
-                "error": "Unexpected processing error",
-                "details": str(e),
-                "traceback": traceback.format_exc()
-            }), 500
-
-    except Exception as e:
-        return jsonify({
-            "error": "Unexpected server error",
-            "details": str(e),
-            "traceback": traceback.format_exc()
-        }), 500
+    return jsonify({
+        "text": extracted_text,
+        "words": segmented_text
+    })
 
 @app.route("/dictionary", methods=["GET"])
 def dictionary():
