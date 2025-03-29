@@ -18,7 +18,10 @@ import re
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+if os.name == 'nt':  # Windows
+    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+else:  # Linux (Railway uses Ubuntu)
+    pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
 
 mecab = MeCab.Tagger("-Owakati")
 
