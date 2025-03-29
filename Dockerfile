@@ -6,7 +6,8 @@ ENV PYTHONUNBUFFERED 1
 ENV TESSDATA_PREFIX /usr/share/tesseract-ocr/4.00/tessdata
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-jpn \
     tesseract-ocr-jpn-vert \
