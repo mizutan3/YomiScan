@@ -15,13 +15,14 @@ RUN apt-get update && apt-get install -y \
     libxrender-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Verify Tesseract installation and language files
+# Verify Tesseract installation and copy language files
 RUN tesseract --version && \
     tesseract --list-langs && \
     mkdir -p /usr/share/tesseract-ocr/tessdata && \
     if [ -d /usr/share/tesseract-ocr/5/tessdata ]; then \
-        cp /usr/share/tesseract-ocr/5/tessdata/* /usr/share/tesseract-ocr/tessdata/; \
-    fi
+        cp -r /usr/share/tesseract-ocr/5/tessdata/* /usr/share/tesseract-ocr/tessdata/; \
+    fi && \
+    tesseract --list-langs
 
 WORKDIR /app
 
