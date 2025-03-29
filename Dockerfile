@@ -9,15 +9,8 @@ RUN apt-get update && apt-get install -y \
     libmecab-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY setup_tessdata.sh .
-RUN chmod +x setup_tessdata.sh && ./setup_tessdata.sh
-
 # Set working directory
 WORKDIR /app
-
-RUN mkdir -p /app/data/dictionaries
-RUN mkdir -p /app/data/tessdata
-VOLUME /app/data
 
 # Copy requirements first (for caching)
 COPY requirements.txt .
@@ -27,4 +20,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Run Flask
-CMD ["python", "server.py"]
+CMD ["python", "app.py"]
