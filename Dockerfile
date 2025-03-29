@@ -15,8 +15,8 @@ RUN apt-get update && \
     mecab \
     mecab-ipadic-utf8 \
     libmecab-dev \
-    file \       # Provides the magic.h header
-    && rm -rf /var/lib/apt/lists/*
+    file && \
+    rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
