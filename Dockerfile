@@ -12,32 +12,9 @@ RUN apt-get update && apt-get install -y \
     libxrender-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install gdown with speed limitation
-RUN pip install --no-cache-dir gdown && \
-    echo 'import gdown\n\
-import os\n\
-import sys\n\
-\n\
-try:\n\
-    print("Starting download with speed limit...")\n\
-    gdown.download(\n\
-        "https://drive.google.com/uc?export=download&id=16XzYxhja-m9zduZPA25QpIZUVt_hwExm",\n\
-        "tesseract-files.zip",\n\
-        quiet=False,\n\
-        speed=2000*1024  # Limit to 2MB/s\n\
-    )\n\
-    if os.path.exists("tesseract-files.zip"):\n\
-        print("Download completed successfully")\n\
-        sys.exit(0)\n\
-    else:\n\
-        print("Download failed - file not found")\n\
-        sys.exit(1)\n\
-except Exception as e:\n\
-    print(f"Download failed: {str(e)}")\n\
-    sys.exit(1)' > /tmp/download.py && \
-    python /tmp/download.py && \
-    unzip tesseract-files.zip -d /usr/local/ && \
-    rm tesseract-files.zip /tmp/download.py
+# Download Tesseract from GitHub Releases (replace with your actual URL)
+RUN wget https://github.com/tesseract-ocr/tessdata/raw/main/jpn.traineddata -O /usr/local/share/tessdata/jpn.traineddata \
+    && wget https://github.com/tesseract-ocr/tessdata/raw/main/jpn_vert.traineddata -O /usr/local/share/tessdata/jpn_vert.traineddata
 
 # Set environment variables
 ENV TESSDATA_PREFIX=/usr/local/Tesseract-OCR/tessdata
