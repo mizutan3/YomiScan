@@ -14,6 +14,7 @@ from typing import Dict, List, Set
 from werkzeug.utils import secure_filename
 import magic
 import re
+import traceback
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
