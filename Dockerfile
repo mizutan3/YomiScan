@@ -15,10 +15,13 @@ RUN apt-get update && apt-get install -y \
     libxrender-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Create tessdata directory and verify installation
-RUN mkdir -p /usr/share/tesseract-ocr/tessdata \
-    && tesseract --version \
-    && tesseract --list-langs
+# Verify Tesseract installation and explicitly copy language files
+RUN mkdir -p /usr/share/tesseract-ocr/tessdata && \
+    tesseract --version && \
+    # Ensure language files are in the correct location
+    cp /usr/share/tesseract-ocr/4.00/tessdata/jpn.traineddata /usr/share/tesseract-ocr/tessdata/ && \
+    cp /usr/share/tesseract-ocr/4.00/tessdata/jpn_vert.traineddata /usr/share/tesseract-ocr/tessdata/ && \
+    tesseract --list-langs
 
 WORKDIR /app
 
