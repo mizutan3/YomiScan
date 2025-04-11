@@ -189,25 +189,62 @@ def get_available_dictionaries() -> List[Dict]:
             })
     return available
 
+def adjust_gamma(image, gamma=1.0):
+    """Gamma correction for brightness adjustment"""
+    inv_gamma = 1.0 / gamma
+    table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
+    return cv2.LUT(image, table)
+
+def remove_shadows(image):
+    """Remove shadows from an image"""
+    if len(image.shape) == 2:  # Grayscale
+        rgb_planes = [image]
+    else:  # Color
+        rgb_planes = cv2.split(image)
+    
+    result_planes = []
+    for plane in rgb_planes:
+        # Estimate background using morphological closing
+        dilated_img = cv2.dilate(plane, np.ones((7,7), np.uint8))
+        bg_img = cv2.medianBlur(dilated_img, 21)
+        # Subtract background from original
+        diff_img = 255 - cv2.absdiff(plane, bg_img)
+        result_planes.append(diff_img)
+    
+    if len(result_planes) == 1:
+        return result_planes[0]
+    return cv2.merge(result_planes)
+
 def preprocess_image(image_data: str) -> np.ndarray:
+    # Decode base64 image
     nparr = np.frombuffer(base64.b64decode(image_data), np.uint8)
-    img = cv2.imdecode(nparr, cv2.IMREAD_GRAYSCALE)
-
-    # Noise reduction with light blur
-    img = cv2.GaussianBlur(img, (3, 3), 0)
-
-    # Contrast enhancement
-    img = cv2.normalize(img, None, 0, 255, cv2.NORM_MINMAX)
-
-    # Binarization
-    _, img = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-    # Morphological operations
-    kernel = np.ones((1, 1), np.uint8)
-    img = cv2.erode(img, kernel, iterations=1)
-    img = cv2.dilate(img, kernel, iterations=1)
-
-    return img
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)  # Read as color
+    
+    # 1. Remove shadows
+    shadow_removed = remove_shadows(img)
+    
+    # 2. Convert to grayscale
+    gray = cv2.cvtColor(shadow_removed, cv2.COLOR_BGR2GRAY)
+    
+    # 3. Gamma correction (brightness adjustment)
+    gamma_corrected = adjust_gamma(gray, gamma=2.0)  # Adjust gamma as needed
+    
+    # 4. Contrast enhancement with CLAHE
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
+    enhanced = clahe.apply(gamma_corrected)
+    
+    # 5. Noise reduction with light blur
+    blurred = cv2.GaussianBlur(enhanced, (3,3), 0)
+    
+    # 6. Binarization (Otsu's method)
+    _, binary = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    
+    # 7. Morphological operations
+    kernel = np.ones((1,1), np.uint8)
+    img_processed = cv2.erode(binary, kernel, iterations=1)
+    img_processed = cv2.dilate(img_processed, kernel, iterations=1)
+    
+    return img_processed
 
 def segment_words(text: str) -> List[str]:
     if not text.strip():
