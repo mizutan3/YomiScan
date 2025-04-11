@@ -38,6 +38,7 @@ active_dictionaries: Set[str] = set()
 dictionary_order: List[str] = []
 
 def load_config():
+    """Load configuration from file including dictionary order and loaded state"""
     global dictionary_order, active_dictionaries
 
     try:
@@ -48,10 +49,13 @@ def load_config():
                 active_dictionaries = set(config.get('active_dictionaries', []))
     except Exception as e:
         print(f"Error loading config: {str(e)}")
+        # Reset to defaults if config is corrupted
         dictionary_order = []
         active_dictionaries = set()
 
+
 def save_config():
+    """Save current configuration to file"""
     config = {
         'dictionary_order': dictionary_order,
         'active_dictionaries': list(active_dictionaries)
@@ -63,7 +67,9 @@ def save_config():
     except Exception as e:
         print(f"Error saving config: {str(e)}")
 
+
 def process_structured_content(structured_content) -> Dict:
+    """Process structured content to extract text only."""
     extracted_text = []
 
     if isinstance(structured_content, list):
@@ -80,11 +86,14 @@ def process_structured_content(structured_content) -> Dict:
         "text": "\n".join(extracted_text).strip()
     }
 
+
 def load_dictionary(dict_name):
+    """Improved dictionary loading with validation and dictionary tracking"""
     dict_path = os.path.join(DICTIONARY_BASE_PATH, dict_name)
     if not os.path.exists(dict_path):
         return False
 
+    # Validate dictionary structure first
     index_path = os.path.join(dict_path, 'index.json')
     if not os.path.exists(index_path):
         return False
@@ -97,6 +106,7 @@ def load_dictionary(dict_name):
     except:
         return False
 
+    # Find all term bank files in the dictionary
     term_bank_files = []
     for root, _, files in os.walk(dict_path):
         for file in files:
@@ -104,8 +114,9 @@ def load_dictionary(dict_name):
                 term_bank_files.append(os.path.join(root, file))
 
     if not term_bank_files:
-        return False
+        return False  # Not a valid dictionary
 
+    # Sort files numerically
     term_bank_files.sort(key=lambda x: int(x.split("_")[-1].split(".")[0]))
 
     loaded_entries = 0
@@ -123,7 +134,7 @@ def load_dictionary(dict_name):
                         structured_content = entry[5]
 
                         content_data = process_structured_content(structured_content)
-                        content_data["dict"] = dict_name
+                        content_data["dict"] = dict_name  # Track which dictionary this came from
 
                         if key not in dictionary_map:
                             dictionary_map[key] = {}
@@ -137,47 +148,60 @@ def load_dictionary(dict_name):
 
     if loaded_entries > 0:
         active_dictionaries.add(dict_name)
-        save_config()
+        save_config()  # Save the updated active dictionaries
         return True
     return False
 
-def initialize_dictionaries():
-    print("Initializing dictionaries...")
-    load_config()
 
+def initialize_dictionaries():
+    """Load initial dictionaries on startup"""
+    print("Initializing dictionaries...")
+    load_config()  # Load saved configuration
+
+    # Get all available dictionaries
     available = [d['name'] for d in get_available_dictionaries()]
 
+    # If we have a saved order, use that, otherwise initialize with all available
     if not dictionary_order:
         dictionary_order.extend(available)
 
+    # Load dictionaries that were active in the last session
     for dict_name in dictionary_order:
         if dict_name in active_dictionaries:
             load_dictionary(dict_name)
 
-    save_config()
+    save_config()  # Ensure config is saved after initialization
+
 
 def unload_dictionary(dict_name: str) -> bool:
+    """Unload a dictionary by removing its entries"""
     if dict_name not in active_dictionaries:
         return False
 
+    # Remove all entries from this dictionary
     for word in list(dictionary_map.keys()):
         for reading in list(dictionary_map[word].keys()):
+            # Filter out entries from this dictionary
             dictionary_map[word][reading] = [
                 entry for entry in dictionary_map[word][reading]
                 if entry.get("dict") != dict_name
             ]
 
+            # Remove reading if empty
             if not dictionary_map[word][reading]:
                 del dictionary_map[word][reading]
 
+        # Remove word if empty
         if not dictionary_map[word]:
             del dictionary_map[word]
 
     active_dictionaries.remove(dict_name)
-    save_config()
+    save_config()  # Save the updated active dictionaries
     return True
 
+
 def get_available_dictionaries() -> List[Dict]:
+    """List all available dictionaries (both loaded and unloaded)"""
     available = []
     if not os.path.exists(DICTIONARY_BASE_PATH):
         return available
@@ -190,11 +214,13 @@ def get_available_dictionaries() -> List[Dict]:
             })
     return available
 
+
 def adjust_gamma(image, gamma=1.0):
     """Gamma correction for brightness adjustment"""
     inv_gamma = 1.0 / gamma
     table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
     return cv2.LUT(image, table)
+
 
 def remove_shadows(image):
     """Remove shadows from an image"""
@@ -202,66 +228,82 @@ def remove_shadows(image):
         rgb_planes = [image]
     else:  # Color
         rgb_planes = cv2.split(image)
-    
+
     result_planes = []
     for plane in rgb_planes:
         # Estimate background using morphological closing
-        dilated_img = cv2.dilate(plane, np.ones((7,7), np.uint8))
+        dilated_img = cv2.dilate(plane, np.ones((7, 7), np.uint8))
         bg_img = cv2.medianBlur(dilated_img, 21)
         # Subtract background from original
         diff_img = 255 - cv2.absdiff(plane, bg_img)
         result_planes.append(diff_img)
-    
+
     if len(result_planes) == 1:
         return result_planes[0]
     return cv2.merge(result_planes)
 
-def preprocess_image(image_data: str) -> np.ndarray:
+
+def preprocess_image(image_data: str, fast_mode: bool = False) -> np.ndarray:
     # Start timer for whole processing
     start_time = time.time()
-    
+
     # Process the image
     nparr = np.frombuffer(base64.b64decode(image_data), np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    shadow_removed = remove_shadows(img)
-    gray = cv2.cvtColor(shadow_removed, cv2.COLOR_BGR2GRAY)
-    gamma_corrected = adjust_gamma(gray, gamma=2.0)
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
-    enhanced = clahe.apply(gamma_corrected)
-    blurred = cv2.GaussianBlur(enhanced, (3,3), 0)
-    _, binary = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    kernel = np.ones((1,1), np.uint8)
-    img_processed = cv2.erode(binary, kernel, iterations=1)
-    img_processed = cv2.dilate(img_processed, kernel, iterations=1)
-    
+
+    if fast_mode:
+        # Simplified processing for screenshots
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    else:
+        # Original full processing pipeline
+        shadow_removed = remove_shadows(img)
+        gray = cv2.cvtColor(shadow_removed, cv2.COLOR_BGR2GRAY)
+        gamma_corrected = adjust_gamma(gray, gamma=2.0)
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        enhanced = clahe.apply(gamma_corrected)
+        blurred = cv2.GaussianBlur(enhanced, (3, 3), 0)
+        _, binary = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        kernel = np.ones((1, 1), np.uint8)
+        binary = cv2.erode(binary, kernel, iterations=1)
+        binary = cv2.dilate(binary, kernel, iterations=1)
+
     # Calculate and print total time
     total_time = time.time() - start_time
-    print(f"Total image processing time: {total_time:.4f} seconds")
-    
-    return img_processed
+    print(f"Total image processing time: {total_time:.4f} seconds (fast mode: {fast_mode})")
+
+    return binary
+
 
 def segment_words(text: str) -> List[str]:
+    """Segment Japanese text into words using MeCab."""
     if not text.strip():
         return []
 
     words = mecab.parse(text).strip().split()
     return [w for w in words if w.strip()]
 
+
 @app.route("/ocr", methods=["POST"])
 def ocr():
+    """Perform OCR on the uploaded image with optional vertical text recognition."""
     data = request.json
     if "image" not in data:
         return jsonify({"error": "No image provided"}), 400
 
+    # Get the text orientation from the request
     orientation = data.get("orientation", "horizontal")
+    fast_mode = data.get("fast_mode", False)
 
-    processed_img = preprocess_image(data["image"])
+    # Preprocess image and extract text
+    processed_img = preprocess_image(data["image"], fast_mode=fast_mode)
 
+    # Configure Tesseract based on text orientation
     if orientation == "vertical":
-        custom_config = f"--psm 5 -c preserve_interword_spaces=1 {tessdata_dir_config}"
+        custom_config = "--psm 5 -c preserve_interword_spaces=1"
         lang = "jpn_vert"
     else:
-        custom_config = f"--psm 6 -c preserve_interword_spaces=1 {tessdata_dir_config}"
+        custom_config = "--psm 6 -c preserve_interword_spaces=1"
         lang = "jpn"
 
     extracted_text = pytesseract.image_to_string(
@@ -270,6 +312,7 @@ def ocr():
         config=custom_config
     )
 
+    # Segment the extracted text into words
     segmented_text = segment_words(extracted_text)
 
     return jsonify({
@@ -277,21 +320,27 @@ def ocr():
         "words": segmented_text
     })
 
+
 @app.route("/dictionary", methods=["GET"])
 def dictionary():
+    """Fetch Japanese definition from local JSON dictionary with proper ordering."""
     word = request.args.get("word", "").strip()
 
     if not word:
         return jsonify({"error": "No word provided"}), 400
 
+    # Get all entries for this word
     all_entries = dictionary_map.get(word, {})
 
+    # We'll build results in dictionary order
     results = []
 
+    # Process dictionaries in the specified order
     for dict_name in dictionary_order:
         if dict_name not in active_dictionaries:
             continue
 
+        # Find all entries from this dictionary
         for reading, entries in all_entries.items():
             for entry in entries:
                 if entry.get("dict") == dict_name:
@@ -299,7 +348,7 @@ def dictionary():
                         "word": word,
                         "reading": reading,
                         "meanings": [entry["text"]],
-                        "dictionary": dict_name
+                        "dictionary": dict_name  # Optional: include source dictionary
                     })
 
     if results:
@@ -310,6 +359,7 @@ def dictionary():
             "meanings": ["Definition not found."]
         })
 
+
 @app.route("/dictionaries", methods=["GET"])
 def list_dictionaries():
     print("Listing dictionaries in:", DICTIONARY_BASE_PATH)
@@ -318,6 +368,7 @@ def list_dictionaries():
         print("Dictionaries directory doesn't exist!")
         return jsonify(available)
 
+    # Get all dictionary folders
     all_dicts = []
     for item in os.listdir(DICTIONARY_BASE_PATH):
         dict_path = os.path.join(DICTIONARY_BASE_PATH, item)
@@ -329,8 +380,10 @@ def list_dictionaries():
             if term_bank_files:
                 all_dicts.append(item)
 
+    # Create response maintaining the saved order
     result = []
 
+    # First add dictionaries in the saved order
     for dict_name in dictionary_order:
         if dict_name in all_dicts:
             result.append({
@@ -340,14 +393,16 @@ def list_dictionaries():
             })
             all_dicts.remove(dict_name)
 
+    # Then add any remaining dictionaries that weren't in the order
     for dict_name in all_dicts:
         result.append({
             "name": dict_name,
             "loaded": dict_name in active_dictionaries,
-            "position": len(dictionary_order)
+            "position": len(dictionary_order)  # Add at the end
         })
 
     return jsonify(result)
+
 
 @app.route("/dictionaries/load", methods=["POST"])
 def load_dictionary_route():
@@ -379,8 +434,10 @@ def load_dictionary_route():
             "error": f"Failed to load dictionary: {str(e)}"
         }), 500
 
+
 @app.route("/dictionaries/reorder", methods=["POST"])
 def reorder_dictionaries():
+    """Change the order of dictionaries"""
     data = request.json
     if "order" not in data:
         return jsonify({
@@ -399,6 +456,7 @@ def reorder_dictionaries():
             "details": "Order must be a list of dictionary names"
         }), 400
 
+    # Validate all dictionaries in the new order exist
     for dict_name in new_order:
         dict_path = os.path.join(DICTIONARY_BASE_PATH, dict_name)
         if not os.path.exists(dict_path):
@@ -408,8 +466,9 @@ def reorder_dictionaries():
                 "details": f"Dictionary '{dict_name}' not found"
             }), 400
 
+    # Update the order
     dictionary_order = new_order
-    save_config()
+    save_config()  # Save the new order
 
     return jsonify({
         "success": True,
@@ -417,14 +476,17 @@ def reorder_dictionaries():
         "order": dictionary_order
     })
 
+
 @app.route("/dictionaries/order", methods=["GET"])
 def get_dictionary_order():
     return jsonify({
         "order": dictionary_order
     })
 
+
 @app.route("/dictionaries/unload", methods=["POST"])
 def unload_dictionary_route():
+    """Unload a specific dictionary"""
     data = request.json
     if "name" not in data:
         return jsonify({"error": "Dictionary name not provided"}), 400
@@ -434,8 +496,10 @@ def unload_dictionary_route():
     else:
         return jsonify({"error": f"Dictionary {data['name']} not loaded"}), 400
 
+
 @app.route("/dictionaries/upload", methods=["POST"])
 def upload_dictionary():
+    """Upload a new dictionary zip file with proper Japanese name handling"""
     if 'file' not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
 
@@ -443,25 +507,30 @@ def upload_dictionary():
     if file.filename == '':
         return jsonify({"error": "No selected file"}), 400
 
+    # Get original filename
     original_filename = file.filename
     if not original_filename.lower().endswith('.zip'):
         return jsonify({"error": "Only .zip files are supported"}), 400
 
     temp_dir = None
     try:
+        # Create temp directory
         temp_dir = tempfile.mkdtemp()
         zip_path = os.path.join(temp_dir, "temp_upload.zip")
         file.save(zip_path)
 
+        # Verify it's actually a zip file
         if not zipfile.is_zipfile(zip_path):
             return jsonify({"error": "The file is not a valid ZIP archive"}), 400
 
+        # First try to get the dictionary name from index.json
         dict_name = None
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             try:
                 with zip_ref.open('index.json') as index_file:
                     index_data = json.load(index_file)
                     if isinstance(index_data, dict):
+                        # Try different possible name fields
                         for field in ['title', 'name', 'dictionary']:
                             if field in index_data:
                                 dict_name = str(index_data[field])
@@ -469,13 +538,17 @@ def upload_dictionary():
             except (KeyError, json.JSONDecodeError):
                 pass
 
+        # Fallback to filename without extension if no name found in index.json
         if not dict_name:
             base_name = os.path.splitext(original_filename)[0]
-            clean_name = re.sub(r'(\[.*?\])|(\(.*?\))', '', base_name)
-            clean_name = clean_name.strip()
+            # Clean up common patterns in filenames but preserve Japanese
+            clean_name = re.sub(r'(\[.*?\])|(\(.*?\))', '', base_name)  # Remove brackets and parentheses
+            clean_name = clean_name.strip()  # Remove extra whitespace
             dict_name = clean_name
 
+        # Custom sanitization that preserves Japanese characters
         def safe_japanese_filename(name):
+            # Keep Japanese characters, letters, numbers, spaces, and basic punctuation
             keep_chars = (' ', '-', '_', '・', '～')
             return ''.join(c for c in name if c.isalnum() or c in keep_chars).strip()
 
@@ -483,13 +556,16 @@ def upload_dictionary():
 
         extract_path = os.path.join(DICTIONARY_BASE_PATH, dict_name)
 
+        # Remove existing if present
         if os.path.exists(extract_path):
             shutil.rmtree(extract_path)
         os.makedirs(extract_path)
 
+        # Extract all files
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(extract_path)
 
+        # Verify we have term bank files
         term_bank_files = [
             f for f in os.listdir(extract_path)
             if f.startswith("term_bank_") and f.endswith(".json")
@@ -499,6 +575,7 @@ def upload_dictionary():
             shutil.rmtree(extract_path)
             return jsonify({"error": "No term bank files found in dictionary"}), 400
 
+        # Add the new dictionary to the order if it's not already there
         if dict_name not in dictionary_order:
             dictionary_order.append(dict_name)
             save_config()
@@ -511,6 +588,7 @@ def upload_dictionary():
         })
 
     except Exception as e:
+        # Clean up on error
         if temp_dir and os.path.exists(temp_dir):
             shutil.rmtree(temp_dir, ignore_errors=True)
         if 'extract_path' in locals() and os.path.exists(extract_path):
@@ -524,8 +602,10 @@ def upload_dictionary():
         if temp_dir and os.path.exists(temp_dir):
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+
 @app.route("/dictionaries/<dict_name>", methods=["DELETE"])
 def delete_dictionary(dict_name):
+    """Delete a dictionary directory"""
     dict_path = os.path.join(DICTIONARY_BASE_PATH, dict_name)
     if not os.path.exists(dict_path):
         return jsonify({"error": "Dictionary not found"}), 404
@@ -536,6 +616,7 @@ def delete_dictionary(dict_name):
             unload_dictionary(dict_name)
         shutil.rmtree(dict_path)
 
+        # Remove from order if present
         if dict_name in dictionary_order:
             dictionary_order.remove(dict_name)
             save_config()
@@ -549,6 +630,8 @@ def delete_dictionary(dict_name):
             "error": f"Failed to delete dictionary: {str(e)}"
         }), 500
 
+
+# Initialize dictionaries on startup
 initialize_dictionaries()
 
 if __name__ == "__main__":
