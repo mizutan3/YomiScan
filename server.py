@@ -218,64 +218,25 @@ def remove_shadows(image):
 
 def preprocess_image(image_data: str) -> np.ndarray:
     # Start timer for whole processing
-    total_start = time.time()
+    start_time = time.time()
     
-    # Decode base64 image
-    decode_start = time.time()
+    # Process the image
     nparr = np.frombuffer(base64.b64decode(image_data), np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    decode_time = time.time() - decode_start
-    print(f"Image decode time: {decode_time:.4f}s")
-    
-    # 1. Remove shadows
-    shadow_start = time.time()
     shadow_removed = remove_shadows(img)
-    shadow_time = time.time() - shadow_start
-    print(f"Shadow removal time: {shadow_time:.4f}s")
-    
-    # 2. Convert to grayscale
-    gray_start = time.time()
     gray = cv2.cvtColor(shadow_removed, cv2.COLOR_BGR2GRAY)
-    gray_time = time.time() - gray_start
-    print(f"Grayscale conversion time: {gray_time:.4f}s")
-    
-    # 3. Gamma correction
-    gamma_start = time.time()
     gamma_corrected = adjust_gamma(gray, gamma=2.0)
-    gamma_time = time.time() - gamma_start
-    print(f"Gamma correction time: {gamma_time:.4f}s")
-    
-    # 4. CLAHE enhancement
-    clahe_start = time.time()
     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
     enhanced = clahe.apply(gamma_corrected)
-    clahe_time = time.time() - clahe_start
-    print(f"CLAHE enhancement time: {clahe_time:.4f}s")
-    
-    # 5. Gaussian blur
-    blur_start = time.time()
     blurred = cv2.GaussianBlur(enhanced, (3,3), 0)
-    blur_time = time.time() - blur_start
-    print(f"Gaussian blur time: {blur_time:.4f}s")
-    
-    # 6. Binarization
-    bin_start = time.time()
     _, binary = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    bin_time = time.time() - bin_start
-    print(f"Binarization time: {bin_time:.4f}s")
-    
-    # 7. Morphological operations
-    morph_start = time.time()
     kernel = np.ones((1,1), np.uint8)
     img_processed = cv2.erode(binary, kernel, iterations=1)
     img_processed = cv2.dilate(img_processed, kernel, iterations=1)
-    morph_time = time.time() - morph_start
-    print(f"Morphological ops time: {morph_time:.4f}s")
     
-    # Calculate total time
-    total_time = time.time() - total_start
-    print(f"TOTAL IMAGE PROCESSING TIME: {total_time:.4f}s")
-    print("-" * 50)  # Separator for readability
+    # Calculate and print total time
+    total_time = time.time() - start_time
+    print(f"Total image processing time: {total_time:.4f} seconds")
     
     return img_processed
 
