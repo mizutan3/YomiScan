@@ -20,8 +20,11 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 
 if os.name == 'nt':  # Windows
     pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+    tessdata_dir_config = r'--tessdata-dir "C:\Program Files\Tesseract-OCR\tessdata"'
 else:  # Linux (Railway uses Ubuntu)
     pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
+    # Point to your tessdata directory in the project
+    tessdata_dir_config = '--tessdata-dir ./tessdata'
 
 mecab = MeCab.Tagger("-Owakati")
 
@@ -224,10 +227,10 @@ def ocr():
     processed_img = preprocess_image(data["image"])
 
     if orientation == "vertical":
-        custom_config = "--psm 5 -c preserve_interword_spaces=1"
+        custom_config = f"--psm 5 -c preserve_interword_spaces=1 {tessdata_dir_config}"
         lang = "jpn_vert"
     else:
-        custom_config = "--psm 6 -c preserve_interword_spaces=1"
+        custom_config = f"--psm 6 -c preserve_interword_spaces=1 {tessdata_dir_config}"
         lang = "jpn"
 
     extracted_text = pytesseract.image_to_string(
