@@ -286,7 +286,7 @@ def segment_words(text: str) -> List[str]:
 
 @app.route("/ocr", methods=["POST"])
 def ocr():
-    """Perform OCR on the uploaded image with optional vertical text recognition."""
+    """Perform OCR on the uploaded image with optional vertical text recognition and cropping."""
     data = request.json
     if "image" not in data:
         return jsonify({"error": "No image provided"}), 400
@@ -294,9 +294,30 @@ def ocr():
     # Get the text orientation from the request
     orientation = data.get("orientation", "horizontal")
     fast_mode = data.get("fast_mode", False)
+    crop_data = data.get("crop", None)
 
     # Preprocess image and extract text
     processed_img = preprocess_image(data["image"], fast_mode=fast_mode)
+
+    # Apply cropping if specified
+    if crop_data:
+        try:
+            height, width = processed_img.shape[:2]
+            left = int(crop_data["left"] * width)
+            top = int(crop_data["top"] * height)
+            right = left + int(crop_data["width"] * width)
+            bottom = top + int(crop_data["height"] * height)
+
+            # Ensure coordinates are within image bounds
+            left = max(0, left)
+            top = max(0, top)
+            right = min(width, right)
+            bottom = min(height, bottom)
+
+            if right > left and bottom > top:  # Only crop if valid dimensions
+                processed_img = processed_img[top:bottom, left:right]
+        except Exception as e:
+            print(f"Error applying crop: {str(e)}")
 
     # Configure Tesseract based on text orientation
     if orientation == "vertical":
@@ -629,6 +650,62 @@ def delete_dictionary(dict_name):
         return jsonify({
             "error": f"Failed to delete dictionary: {str(e)}"
         }), 500
+
+
+@app.route("/dictionary/search", methods=["GET"])
+def search_dictionary_words():
+    query = request.args.get("query", "").strip()
+    if not query:
+        return jsonify([])
+
+    # Check if query is kana (hiragana or katakana)
+    is_kana_query = re.fullmatch(r'[\u3040-\u309F\u30A0-\u30FF]+', query) is not None
+
+    exact_word_matches = []
+    exact_reading_matches = []
+    partial_matches = []
+
+    query_lower = query.lower()
+
+    for word in dictionary_map.keys():
+        lower_word = word.lower()
+
+        # 1. Exact word matches
+        if lower_word == query_lower:
+            exact_word_matches.append(word)
+            continue
+
+        # For kana queries only
+        if is_kana_query:
+            # 2. Exact reading matches
+            exact_reading_match = False
+            for reading in dictionary_map[word].keys():
+                if query_lower == reading.lower():
+                    exact_reading_matches.append(word)
+                    exact_reading_match = True
+                    break
+
+            if not exact_reading_match:
+                # 3. Partial matches (word contains query)
+                if query_lower in lower_word:
+                    partial_matches.append(word)
+        else:
+            # For kanji queries, only exact matches
+            if lower_word.startswith(query_lower):
+                partial_matches.append(word)
+
+    # Combine results in priority order
+    results = exact_word_matches + exact_reading_matches + partial_matches
+
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_results = []
+    for word in results:
+        if word not in seen:
+            seen.add(word)
+            unique_results.append(word)
+
+    return jsonify(unique_results[:50])  # Return up to 50 matches
 
 
 # Initialize dictionaries on startup
