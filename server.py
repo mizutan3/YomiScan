@@ -39,6 +39,7 @@ tagger = Tagger('-Owakati')
 DICTIONARY_BASE_PATH = os.environ.get("DICTIONARY_PATH", "./dictionaries")
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "app_config.json")
 os.makedirs(DICTIONARY_BASE_PATH, exist_ok=True)
+USER_DATA_DIR = os.environ.get("USER_DATA_PATH", "./user_data")
 
 dictionary_map: Dict[str, Dict[str, List[Dict]]] = {}
 active_dictionaries: Set[str] = set()
