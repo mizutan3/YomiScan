@@ -20,6 +20,7 @@ from io import BytesIO
 import shutil
 import magic
 from playsound import playsound
+from conjugation_rules import CONJUGATION_PATTERNS
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -45,35 +46,49 @@ dictionary_map: Dict[str, Dict[str, List[Dict]]] = {}
 active_dictionaries: Set[str] = set()
 dictionary_order: List[str] = []
 
-def load_config():
-    """Load configuration from file including dictionary order and loaded state"""
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify({"status": "ok"}), 200
+
+def load_config(device_id: str):
     global dictionary_order, active_dictionaries
 
+    safe_device_id = sanitize_filename(device_id)
+    config_file = os.path.join(USER_DATA_DIR, f"{safe_device_id}_config.json")
+
     try:
-        if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+        if os.path.exists(config_file):
+            with open(config_file, 'r', encoding='utf-8') as f:
                 config = json.load(f)
                 dictionary_order = config.get('dictionary_order', [])
                 active_dictionaries = set(config.get('active_dictionaries', []))
+                print(f"Loaded config for device {safe_device_id}")
+        else:
+            print(f"No config found for device {safe_device_id}, using defaults")
+            dictionary_order = []
+            active_dictionaries = set()
     except Exception as e:
-        print(f"Error loading config: {str(e)}")
-        # Reset to defaults if config is corrupted
+        print(f"Error loading config for {safe_device_id}: {str(e)}")
         dictionary_order = []
         active_dictionaries = set()
 
 
-def save_config():
-    """Save current configuration to file"""
+def save_config(device_id: str, order=None, active=None):
+    safe_device_id = sanitize_filename(device_id)
+    config_file = os.path.join(USER_DATA_DIR, f"{safe_device_id}_config.json")
+
     config = {
-        'dictionary_order': dictionary_order,
-        'active_dictionaries': list(active_dictionaries)
+        'dictionary_order': order if order is not None else dictionary_order,
+        'active_dictionaries': list(active if active is not None else active_dictionaries)
     }
 
     try:
-        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+        os.makedirs(USER_DATA_DIR, exist_ok=True)
+        with open(config_file, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
+        print(f"✅ Saved config for device {safe_device_id}")
     except Exception as e:
-        print(f"Error saving config: {str(e)}")
+        print(f"❌ Error saving config for {safe_device_id}: {str(e)}")
 
 
 def process_structured_content(structured_content) -> Dict:
@@ -95,13 +110,12 @@ def process_structured_content(structured_content) -> Dict:
     }
 
 
-def load_dictionary(dict_name):
-    """Improved dictionary loading with validation and dictionary tracking"""
+def load_dictionary(dict_name: str, device_id: str) -> bool:
+    """Improved dictionary loading with per-device memory isolation"""
     dict_path = os.path.join(DICTIONARY_BASE_PATH, dict_name)
     if not os.path.exists(dict_path):
         return False
 
-    # Validate dictionary structure first
     index_path = os.path.join(dict_path, 'index.json')
     if not os.path.exists(index_path):
         return False
@@ -114,18 +128,18 @@ def load_dictionary(dict_name):
     except:
         return False
 
-    # Find all term bank files in the dictionary
     term_bank_files = []
     for root, _, files in os.walk(dict_path):
         for file in files:
             if file.startswith("term_bank_") and file.endswith(".json"):
                 term_bank_files.append(os.path.join(root, file))
-
     if not term_bank_files:
-        return False  # Not a valid dictionary
+        return False
 
-    # Sort files numerically
     term_bank_files.sort(key=lambda x: int(x.split("_")[-1].split(".")[0]))
+
+    if device_id not in dictionary_map:
+        dictionary_map[device_id] = {}
 
     loaded_entries = 0
     for file_path in term_bank_files:
@@ -142,67 +156,99 @@ def load_dictionary(dict_name):
                         structured_content = entry[5]
 
                         content_data = process_structured_content(structured_content)
-                        content_data["dict"] = dict_name  # Track which dictionary this came from
+                        content_data["dict"] = dict_name
 
-                        if key not in dictionary_map:
-                            dictionary_map[key] = {}
-                        if reading not in dictionary_map[key]:
-                            dictionary_map[key][reading] = []
-                        dictionary_map[key][reading].append(content_data)
+                        if key not in dictionary_map[device_id]:
+                            dictionary_map[device_id][key] = {}
+                        if reading not in dictionary_map[device_id][key]:
+                            dictionary_map[device_id][key][reading] = []
+                        dictionary_map[device_id][key][reading].append(content_data)
                         loaded_entries += 1
         except Exception as e:
             print(f"Error loading {file_path}: {str(e)}")
             continue
 
-    if loaded_entries > 0:
-        active_dictionaries.add(dict_name)
-        save_config()  # Save the updated active dictionaries
-        return True
-    return False
+    return loaded_entries > 0
 
-def initialize_dictionaries():
-    """Load initial dictionaries on startup"""
-    print("Initializing dictionaries...")
-    load_config()  # Load saved configuration
 
-    # Get all available dictionaries
+@app.route("/dictionaries/init", methods=["POST"])
+def initialize_dictionaries_route():
+    data = request.get_json()
+    device_id = data.get("device_id")
+
+    if not device_id:
+        return jsonify({"error": "Missing device_id"}), 400
+
+    try:
+        initialize_dictionaries(device_id)
+        return jsonify({"success": True})
+    except Exception as e:
+        print(f"❌ Failed to initialize dictionaries: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+def initialize_dictionaries(device_id: str):
+    """Load user-specific dictionaries based on their config"""
+    global dictionary_order, active_dictionaries
+
+    print(f"Initializing dictionaries for device: {device_id}")
+    load_config(device_id)
+
     available = [d['name'] for d in get_available_dictionaries()]
 
-    # If we have a saved order, use that, otherwise initialize with all available
-    if not dictionary_order:
-        dictionary_order.extend(available)
+    # Якщо конфіг порожній — перший запуск
+    if not dictionary_order and not active_dictionaries:
+        print("First time setup — enabling all available dictionaries")
 
-    # Load dictionaries that were active in the last session
+        dictionary_order = available.copy()
+        active_dictionaries = set()
+
+        for dict_name in available:
+            load_dictionary(dict_name, device_id)
+
+        save_config(device_id, dictionary_order, active_dictionaries)
+        return
+
     for dict_name in dictionary_order:
-        if dict_name in active_dictionaries:
-            load_dictionary(dict_name)
+        if dict_name in active_dictionaries and dict_name in available:
+            load_dictionary(dict_name, device_id)
 
-    save_config()  # Ensure config is saved after initialization
+    save_config(device_id)
 
-def unload_dictionary(dict_name: str) -> bool:
-    """Unload a dictionary by removing its entries"""
+
+def unload_dictionary(dict_name: str, device_id: str) -> bool:
+    global active_dictionaries
+    print(f"🔄 Trying to unload {dict_name} for device {device_id}")
+    load_config(device_id)
+
     if dict_name not in active_dictionaries:
+        print(f"❌ {dict_name} not in active_dictionaries: {list(active_dictionaries)}")
         return False
 
-    # Remove all entries from this dictionary
-    for word in list(dictionary_map.keys()):
-        for reading in list(dictionary_map[word].keys()):
-            # Filter out entries from this dictionary
-            dictionary_map[word][reading] = [
-                entry for entry in dictionary_map[word][reading]
+    found_any = False
+    device_dict = dictionary_map.get(device_id, {})
+
+    for word in list(device_dict.keys()):
+        for reading in list(device_dict[word].keys()):
+            original_len = len(device_dict[word][reading])
+            device_dict[word][reading] = [
+                entry for entry in device_dict[word][reading]
                 if entry.get("dict") != dict_name
             ]
+            if len(device_dict[word][reading]) < original_len:
+                found_any = True
 
-            # Remove reading if empty
-            if not dictionary_map[word][reading]:
-                del dictionary_map[word][reading]
+            if not device_dict[word][reading]:
+                del device_dict[word][reading]
 
-        # Remove word if empty
-        if not dictionary_map[word]:
-            del dictionary_map[word]
+        if not device_dict[word]:
+            del device_dict[word]
 
     active_dictionaries.remove(dict_name)
-    save_config()  # Save the updated active dictionaries
+    save_config(device_id, dictionary_order, active_dictionaries)
+
+    print(f"✅ Unloaded {dict_name} from dictionary_map[{device_id}]") if found_any else print(
+        f"⚠️ Nothing to unload for {dict_name} on device {device_id}")
     return True
 
 
@@ -333,12 +379,10 @@ def ocr():
         custom_config = "--psm 6 -c preserve_interword_spaces=1"
         lang = "jpn"
 
-    full_config = f"{custom_config} {tessdata_dir_config}"
-
     extracted_text = pytesseract.image_to_string(
         processed_img,
         lang=lang,
-        config=full_config
+        config=custom_config
     )
 
     # Process the extracted text to join lines while preserving punctuation-newline cases
@@ -390,44 +434,29 @@ def ocr():
     })
 
 
-def get_dictionary_form(word: str) -> str:
-    """Convert conjugated forms to dictionary form"""
+def get_dictionary_form(word: str, device_id: str) -> str:
     if not word:
         return word
 
-    # Try to find exact match first
-    if word in dictionary_map:
+    device_dict = dictionary_map.get(device_id, {})
+
+    if word in device_dict:
         return word
 
-    # Analyze the word to get possible lemmas
-    analyzed = tagger.parseToNodeList(word)
-    if analyzed:
-        # Get the first node's lemma (dictionary form)
-        lemma = analyzed[0].feature.lemma
-        if lemma and lemma != "*":
-            return lemma
+    try:
+        analyzed = tagger.parseToNodeList(word)
+        if analyzed:
+            lemma = analyzed[0].feature.lemma
+            if lemma and lemma != "*" and lemma in device_dict:
+                return lemma
+    except Exception as e:
+        print(f"Error in lemma analysis: {e}")
 
-    # Common conjugation patterns (add more as needed)
-    conjugations = {
-        'った$': 'る',  # past tense (走った -> 走る)
-        'んだ$': 'ぬ',  # past tense (死んだ -> 死ぬ)
-        'いだ$': 'ぐ',  # past tense (泳いだ -> 泳ぐ)
-        'んだ$': 'ぶ',  # past tense (飛んだ -> 飛ぶ)
-        'んだ$': 'む',  # past tense (読んだ -> 読む)
-        'った$': 'う',  # past tense (買った -> 買う)
-        'いた$': 'く',  # past tense (書いた -> 書く)
-        'した$': 'す',  # past tense (話した -> 話す)
-        'て$': '',  # te-form (食べて -> 食べる)
-        'た$': '',  # ta-form (食べた -> 食べる)
-        'ない$': '',  # negative (食べない -> 食べる)
-        'ます$': '',  # polite form (食べます -> 食べる)
-        'ましょう$': '',  # volitional polite (食べましょう -> 食べる)
-    }
-
-    for pattern, replacement in conjugations.items():
-        base = re.sub(pattern, replacement, word)
-        if base in dictionary_map:
-            return base
+    for pattern, replacements in CONJUGATION_PATTERNS.items():
+        for replacement in replacements:
+            base = re.sub(pattern, replacement, word)
+            if base in device_dict:
+                return base
 
     return word
 
@@ -463,49 +492,68 @@ def synthesise_speech():
 
 @app.route("/dictionary", methods=["GET"])
 def dictionary():
-    """Fetch Japanese definition from local JSON dictionary with proper ordering."""
+    """Fetch Japanese definition from local JSON dictionary for a specific device."""
     word = request.args.get("word", "").strip()
+    device_id = request.args.get("device_id")
 
     if not word:
         return jsonify({"error": "No word provided"}), 400
+    if not device_id:
+        return jsonify({"error": "Missing device_id"}), 400
 
-    # Get dictionary form of the word
-    dict_form = get_dictionary_form(word)
+    safe_device_id = sanitize_filename(device_id)
+    config_path = os.path.join(USER_DATA_DIR, f"{safe_device_id}_config.json")
 
-    # Get all entries for both the original word and dictionary form
+    try:
+        if os.path.exists(config_path):
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+                dictionary_order = config.get("dictionary_order", [])
+                active_dictionaries = set(config.get("active_dictionaries", []))
+        else:
+            dictionary_order = []
+            active_dictionaries = set()
+    except Exception as e:
+        return jsonify({"error": f"Failed to load user config: {str(e)}"}), 500
+
+    device_dict = dictionary_map.get(device_id, {})
+    dict_form = get_dictionary_form(word, device_id)
+
     all_entries = {}
 
-    # First try the exact word
-    if word in dictionary_map:
-        all_entries.update(dictionary_map[word])
+    def merge_entries(source_word):
+        if source_word in device_dict:
+            for reading, entries in device_dict[source_word].items():
+                if reading not in all_entries:
+                    all_entries[reading] = []
+                all_entries[reading].extend(entries)
 
-    # Then try the dictionary form
-    if dict_form != word and dict_form in dictionary_map:
-        all_entries.update(dictionary_map[dict_form])
+    merge_entries(word)
+    if dict_form != word:
+        merge_entries(dict_form)
 
-    # If we found nothing, try some common variations
+    # Try kana variants if still empty
     if not all_entries:
-        # Try katakana/hiragana conversion
         hiragana = jaconv.kata2hira(word)
         katakana = jaconv.hira2kata(word)
+        if hiragana != word:
+            merge_entries(hiragana)
+        if katakana != word:
+            merge_entries(katakana)
 
-        if hiragana != word and hiragana in dictionary_map:
-            all_entries.update(dictionary_map[hiragana])
-        if katakana != word and katakana in dictionary_map:
-            all_entries.update(dictionary_map[katakana])
-
-    # We'll build results in dictionary order
+    # Deduplicate results
     results = []
+    seen = set()
 
-    # Process dictionaries in the specified order
     for dict_name in dictionary_order:
         if dict_name not in active_dictionaries:
             continue
 
-        # Find all entries from this dictionary
         for reading, entries in all_entries.items():
             for entry in entries:
-                if entry.get("dict") == dict_name:
+                key = (dict_name, reading, entry.get("text"))
+                if entry.get("dict") == dict_name and key not in seen:
+                    seen.add(key)
                     results.append({
                         "word": word,
                         "reading": reading,
@@ -523,15 +571,32 @@ def dictionary():
             "meanings": ["Definition not found."]
         })
 
+
 @app.route("/dictionaries", methods=["GET"])
 def list_dictionaries():
-    print("Listing dictionaries in:", DICTIONARY_BASE_PATH)
-    available = []
-    if not os.path.exists(DICTIONARY_BASE_PATH):
-        print("Dictionaries directory doesn't exist!")
-        return jsonify(available)
+    device_id = request.args.get("device_id")
+    if not device_id:
+        return jsonify({"error": "Missing device_id"}), 400
 
-    # Get all dictionary folders
+    print("Listing dictionaries in:", DICTIONARY_BASE_PATH)
+
+    safe_device_id = sanitize_filename(device_id)
+    config_path = os.path.join(USER_DATA_DIR, f"{safe_device_id}_config.json")
+
+    try:
+        if os.path.exists(config_path):
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+                dictionary_order = config.get("dictionary_order", [])
+                active_dictionaries = set(config.get("active_dictionaries", []))
+        else:
+            dictionary_order = []
+            active_dictionaries = set()
+    except Exception as e:
+        print("❌ Failed to load config:", e)
+        dictionary_order = []
+        active_dictionaries = set()
+
     all_dicts = []
     for item in os.listdir(DICTIONARY_BASE_PATH):
         dict_path = os.path.join(DICTIONARY_BASE_PATH, item)
@@ -543,10 +608,8 @@ def list_dictionaries():
             if term_bank_files:
                 all_dicts.append(item)
 
-    # Create response maintaining the saved order
     result = []
 
-    # First add dictionaries in the saved order
     for dict_name in dictionary_order:
         if dict_name in all_dicts:
             result.append({
@@ -556,163 +619,217 @@ def list_dictionaries():
             })
             all_dicts.remove(dict_name)
 
-    # Then add any remaining dictionaries that weren't in the order
     for dict_name in all_dicts:
         result.append({
             "name": dict_name,
             "loaded": dict_name in active_dictionaries,
-            "position": len(dictionary_order)  # Add at the end
+            "position": len(dictionary_order)
         })
 
     return jsonify(result)
 
 
+
 @app.route("/dictionaries/load", methods=["POST"])
 def load_dictionary_route():
     data = request.json
-    if "name" not in data:
-        return jsonify({"error": "Dictionary name not provided"}), 400
+    dict_name = data.get("name")
+    device_id = data.get("device_id")
 
-    dict_path = os.path.join(DICTIONARY_BASE_PATH, data["name"])
-    if not os.path.exists(dict_path):
+    if not dict_name or not device_id:
+        return jsonify({"error": "Missing dictionary name or device_id"}), 400
+
+    if not os.path.exists(os.path.join(DICTIONARY_BASE_PATH, dict_name)):
         return jsonify({"error": "Dictionary not found"}), 404
 
-    try:
-        if load_dictionary(data["name"]):
-            # Add to order if not already present
-            if data["name"] not in dictionary_order:
-                dictionary_order.append(data["name"])
-                save_config()  # Save the new order
-            return jsonify({
-                "success": True,
-                "message": f"Dictionary {data['name']} loaded",
-                "order": dictionary_order
-            })
-        else:
-            return jsonify({
-                "error": f"Dictionary {data['name']} has no valid term_bank files"
-            }), 400
-    except Exception as e:
-        return jsonify({
-            "error": f"Failed to load dictionary: {str(e)}"
-        }), 500
+    if load_dictionary(dict_name, device_id):
+        # Load existing config
+        safe_device_id = sanitize_filename(device_id)
+        config_path = os.path.join(USER_DATA_DIR, f"{safe_device_id}_config.json")
+
+        config = {}
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    config = json.load(f)
+            except Exception as e:
+                print("❌ Failed to read config for load:", e)
+
+        active = set(config.get("active_dictionaries", []))
+        order = config.get("dictionary_order", [])
+
+        active.add(dict_name)
+        if dict_name not in order:
+            order.append(dict_name)
+
+        config["active_dictionaries"] = list(active)
+        config["dictionary_order"] = order
+
+        # Save updated config
+        try:
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(config, f, ensure_ascii=False, indent=2)
+            print(f"✅ Saved updated config (load) for {safe_device_id}")
+        except Exception as e:
+            print("❌ Failed to save config after load:", e)
+
+        return jsonify({"success": True, "order": order})
+    else:
+        return jsonify({"error": f"Failed to load dictionary: {dict_name}"}), 400
 
 
 @app.route("/dictionaries/reorder", methods=["POST"])
 def reorder_dictionaries():
-    """Change the order of dictionaries"""
-    data = request.json
-    if "order" not in data:
+    """Change the order of dictionaries for a specific device"""
+    data = request.get_json()
+    new_order = data.get("order")
+    device_id = data.get("device_id")
+
+    if not new_order or not device_id:
         return jsonify({
             "success": False,
-            "error": "New order not provided",
-            "details": "The 'order' field is required in the request body"
+            "error": "Missing required fields"
         }), 400
-
-    global dictionary_order
-    new_order = data["order"]
 
     if not isinstance(new_order, list):
         return jsonify({
             "success": False,
-            "error": "Invalid order format",
-            "details": "Order must be a list of dictionary names"
+            "error": "'order' must be a list"
         }), 400
 
-    # Validate all dictionaries in the new order exist
+    # Validate dictionary existence
     for dict_name in new_order:
         dict_path = os.path.join(DICTIONARY_BASE_PATH, dict_name)
         if not os.path.exists(dict_path):
             return jsonify({
                 "success": False,
-                "error": "Invalid dictionary in order",
-                "details": f"Dictionary '{dict_name}' not found"
+                "error": f"Dictionary '{dict_name}' not found"
             }), 400
 
-    # Update the order
-    dictionary_order = new_order
-    save_config()  # Save the new order
+    safe_device_id = sanitize_filename(device_id)
+    config_path = os.path.join(USER_DATA_DIR, f"{safe_device_id}_config.json")
 
-    return jsonify({
-        "success": True,
-        "message": "Dictionary order updated",
-        "order": dictionary_order
-    })
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+            current_active = set(config.get("active_dictionaries", []))
+    except:
+        current_active = set()
+
+    global dictionary_order
+    dictionary_order = new_order
+
+    save_config(device_id, dictionary_order, current_active)
+
+    print(f"✅ Saved reordered config for {safe_device_id}")
+    return jsonify({"success": True})
 
 
 @app.route("/dictionaries/order", methods=["GET"])
 def get_dictionary_order():
-    return jsonify({
-        "order": dictionary_order
-    })
+    device_id = request.args.get("device_id")
+    if not device_id:
+        return jsonify({"error": "Missing device_id"}), 400
+
+    safe_device_id = sanitize_filename(device_id)
+    config_path = os.path.join(USER_DATA_DIR, f"{safe_device_id}_config.json")
+
+    try:
+        if os.path.exists(config_path):
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+                return jsonify({
+                    "order": config.get("dictionary_order", [])
+                })
+        else:
+            return jsonify({"order": []})
+    except Exception as e:
+        return jsonify({"error": "Failed to read order"}), 500
 
 
 @app.route("/dictionaries/unload", methods=["POST"])
 def unload_dictionary_route():
-    """Unload a specific dictionary"""
     data = request.json
-    if "name" not in data:
-        return jsonify({"error": "Dictionary name not provided"}), 400
+    dict_name = data.get("name")
+    device_id = data.get("device_id")
 
-    if unload_dictionary(data["name"]):
-        return jsonify({"success": True, "message": f"Dictionary {data['name']} unloaded"})
+    if not dict_name or not device_id:
+        return jsonify({"error": "Missing dictionary name or device_id"}), 400
+
+    if unload_dictionary(dict_name, device_id):
+        return jsonify({"success": True})
     else:
-        return jsonify({"error": f"Dictionary {data['name']} not loaded"}), 400
+        return jsonify({"error": f"Dictionary {dict_name} not loaded"}), 400
 
 @app.route("/dictionary/search", methods=["GET"])
 def search_dictionary_words():
     query = request.args.get("query", "").strip()
-    if not query:
+    device_id = request.args.get("device_id")
+
+    if not query or not device_id:
         return jsonify([])
 
-    # Check if query is kana (hiragana or katakana)
-    is_kana_query = re.fullmatch(r'[\u3040-\u309F\u30A0-\u30FF]+', query) is not None
+    config_path = os.path.join(USER_DATA_DIR, f"{sanitize_filename(device_id)}_config.json")
+    try:
+        if os.path.exists(config_path):
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+                active_dictionaries = set(config.get("active_dictionaries", []))
+        else:
+            active_dictionaries = set()
+    except:
+        active_dictionaries = set()
 
+    device_dict = dictionary_map.get(device_id, {})
+    if not active_dictionaries or not device_dict:
+        return jsonify([])
+
+    is_kana_query = re.fullmatch(r'[\u3040-\u309F\u30A0-\u30FF]+', query) is not None
     exact_word_matches = []
     exact_reading_matches = []
     partial_matches = []
 
     query_lower = query.lower()
+    normalized_form = get_dictionary_form(query, device_id)
+    normalized_lower = normalized_form.lower() if normalized_form else None
 
-    for word in dictionary_map.keys():
+    for word in device_dict.keys():
         lower_word = word.lower()
+        matched = False
 
-        # 1. Exact word matches
-        if lower_word == query_lower:
-            exact_word_matches.append(word)
-            continue
+        # Exact word match
+        if lower_word == query_lower or lower_word == normalized_lower:
+            if any(entry["dict"] in active_dictionaries
+                   for entries in device_dict[word].values()
+                   for entry in entries):
+                exact_word_matches.append(word)
+                continue
 
-        # For kana queries only
+        # Reading match (kana)
         if is_kana_query:
-            # 2. Exact reading matches
-            exact_reading_match = False
-            for reading in dictionary_map[word].keys():
-                if query_lower == reading.lower():
+            for reading, entries in device_dict[word].items():
+                if query_lower == reading.lower() and any(entry["dict"] in active_dictionaries for entry in entries):
                     exact_reading_matches.append(word)
-                    exact_reading_match = True
+                    matched = True
                     break
+            if matched:
+                continue
 
-            if not exact_reading_match:
-                # 3. Partial matches (word contains query)
-                if query_lower in lower_word:
-                    partial_matches.append(word)
-        else:
-            # For kanji queries, only exact matches
-            if lower_word.startswith(query_lower):
+        # Partial match
+        if lower_word.startswith(query_lower) or (normalized_lower and lower_word.startswith(normalized_lower)):
+            if any(entry["dict"] in active_dictionaries
+                   for entries in device_dict[word].values()
+                   for entry in entries):
                 partial_matches.append(word)
 
-    # Combine results in priority order
-    results = exact_word_matches + exact_reading_matches + partial_matches
-
-    # Remove duplicates while preserving order
     seen = set()
     unique_results = []
-    for word in results:
+    for word in exact_word_matches + exact_reading_matches + partial_matches:
         if word not in seen:
             seen.add(word)
             unique_results.append(word)
 
-    return jsonify(unique_results[:50])  # Return up to 50 matches
+    return jsonify(unique_results[:50])
 
 
 def sanitize_filename(name: str) -> str:
@@ -755,8 +872,8 @@ def save_dictionaries_state():
             return jsonify({"error": "Invalid format"}), 400
 
         config = {
+            "dictionary_order": order,
             "active_dictionaries": dictionaries,
-            "dictionary_order": order
         }
 
         os.makedirs(USER_DATA_DIR, exist_ok=True)
@@ -765,14 +882,11 @@ def save_dictionaries_state():
         with open(config_file, "w", encoding="utf-8") as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
 
-        print(f"Saved dictionary config for {safe_device_id}")
+        print(f"✅ Saved dictionary config for {safe_device_id}")
         return jsonify({"success": True})
     except Exception as e:
-        print("Dictionary sync error:", e)
+        print("❌ Dictionary sync error:", e)
         return jsonify({"error": str(e)}), 500
-
-# Initialize dictionaries on startup
-initialize_dictionaries()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
