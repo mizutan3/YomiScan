@@ -1,7 +1,7 @@
 import json
 import os
 import MeCab
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 import cv2
 import numpy as np
@@ -9,12 +9,17 @@ import pytesseract
 import base64
 import zipfile
 import tempfile
-import shutil
 from typing import Dict, List, Set
 from werkzeug.utils import secure_filename
-import magic
 import re
 import time
+import jaconv
+from fugashi import Tagger
+from gtts import gTTS
+from io import BytesIO
+import shutil
+import magic
+from playsound import playsound
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -28,6 +33,8 @@ else:  # Linux (Railway uses Ubuntu)
     tessdata_dir_config = '--tessdata-dir ./tessdata'
 
 mecab = MeCab.Tagger("-Owakati")
+tagger = Tagger('-Owakati')
+
 
 DICTIONARY_BASE_PATH = os.path.join(os.path.dirname(__file__), "dictionaries")
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "app_config.json")
@@ -333,13 +340,124 @@ def ocr():
         config=custom_config
     )
 
-    # Segment the extracted text into words
-    segmented_text = segment_words(extracted_text)
+    # Process the extracted text to join lines while preserving punctuation-newline cases
+    lines = extracted_text.split('\n')
+    processed_lines = []
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        if not line:  # Skip empty lines
+            i += 1
+            continue
+
+        # Check if current line ends with punctuation and next line is not empty
+        if (i < len(lines) - 1 and
+                len(line) > 0 and
+                line[-1] in ('。', '、', '！', '？', '…', '」', '』', '》', ')', '）', '.', ',', '!', '?') and
+                lines[i + 1].strip()):
+            # Keep this line as is and move to next
+            processed_lines.append(line)
+            i += 1
+        else:
+            # Join with next lines until we hit punctuation+newline or end
+            joined_line = line
+            i += 1
+            while i < len(lines):
+                next_line = lines[i].strip()
+                if not next_line:
+                    i += 1
+                    continue
+
+                # Check if we should stop joining
+                if (len(joined_line) > 0 and
+                        joined_line[-1] in ('。', '、', '！', '？', '…', '」', '』', '》', ')', '）', '.', ',', '!', '?')):
+                    break
+
+                joined_line += next_line
+                i += 1
+            processed_lines.append(joined_line)
+
+    # Reconstruct the text with our processed lines
+    processed_text = '\n'.join(processed_lines)
+
+    # Segment the processed text into words
+    segmented_text = segment_words(processed_text)
 
     return jsonify({
-        "text": extracted_text,
+        "text": processed_text,
         "words": segmented_text
     })
+
+
+def get_dictionary_form(word: str) -> str:
+    """Convert conjugated forms to dictionary form"""
+    if not word:
+        return word
+
+    # Try to find exact match first
+    if word in dictionary_map:
+        return word
+
+    # Analyze the word to get possible lemmas
+    analyzed = tagger.parseToNodeList(word)
+    if analyzed:
+        # Get the first node's lemma (dictionary form)
+        lemma = analyzed[0].feature.lemma
+        if lemma and lemma != "*":
+            return lemma
+
+    # Common conjugation patterns (add more as needed)
+    conjugations = {
+        'った$': 'る',  # past tense (走った -> 走る)
+        'んだ$': 'ぬ',  # past tense (死んだ -> 死ぬ)
+        'いだ$': 'ぐ',  # past tense (泳いだ -> 泳ぐ)
+        'んだ$': 'ぶ',  # past tense (飛んだ -> 飛ぶ)
+        'んだ$': 'む',  # past tense (読んだ -> 読む)
+        'った$': 'う',  # past tense (買った -> 買う)
+        'いた$': 'く',  # past tense (書いた -> 書く)
+        'した$': 'す',  # past tense (話した -> 話す)
+        'て$': '',  # te-form (食べて -> 食べる)
+        'た$': '',  # ta-form (食べた -> 食べる)
+        'ない$': '',  # negative (食べない -> 食べる)
+        'ます$': '',  # polite form (食べます -> 食べる)
+        'ましょう$': '',  # volitional polite (食べましょう -> 食べる)
+    }
+
+    for pattern, replacement in conjugations.items():
+        base = re.sub(pattern, replacement, word)
+        if base in dictionary_map:
+            return base
+
+    return word
+
+
+@app.route("/synthesize_speech", methods=["POST"])
+def synthesise_speech():
+    """Synthesize speech from Japanese text"""
+    data = request.json
+    if "text" not in data:
+        return jsonify({"error": "No text provided"}), 400
+
+    try:
+        # Create a temporary in-memory file
+        tts = gTTS(text=data["text"], lang='ja')
+
+        # Use BytesIO to store the audio in memory
+        audio_bytes = BytesIO()
+        tts.write_to_fp(audio_bytes)
+        audio_bytes.seek(0)
+
+        # Convert to base64 for sending to frontend
+        audio_base64 = base64.b64encode(audio_bytes.read()).decode('utf-8')
+
+        return jsonify({
+            "success": True,
+            "audio": audio_base64
+        })
+    except Exception as e:
+        return jsonify({
+            "error": f"Failed to synthesize speech: {str(e)}"
+        }), 500
 
 
 @app.route("/dictionary", methods=["GET"])
@@ -350,8 +468,30 @@ def dictionary():
     if not word:
         return jsonify({"error": "No word provided"}), 400
 
-    # Get all entries for this word
-    all_entries = dictionary_map.get(word, {})
+    # Get dictionary form of the word
+    dict_form = get_dictionary_form(word)
+
+    # Get all entries for both the original word and dictionary form
+    all_entries = {}
+
+    # First try the exact word
+    if word in dictionary_map:
+        all_entries.update(dictionary_map[word])
+
+    # Then try the dictionary form
+    if dict_form != word and dict_form in dictionary_map:
+        all_entries.update(dictionary_map[dict_form])
+
+    # If we found nothing, try some common variations
+    if not all_entries:
+        # Try katakana/hiragana conversion
+        hiragana = jaconv.kata2hira(word)
+        katakana = jaconv.hira2kata(word)
+
+        if hiragana != word and hiragana in dictionary_map:
+            all_entries.update(dictionary_map[hiragana])
+        if katakana != word and katakana in dictionary_map:
+            all_entries.update(dictionary_map[katakana])
 
     # We'll build results in dictionary order
     results = []
@@ -369,7 +509,9 @@ def dictionary():
                         "word": word,
                         "reading": reading,
                         "meanings": [entry["text"]],
-                        "dictionary": dict_name  # Optional: include source dictionary
+                        "dictionary": dict_name,
+                        "original_form": word if word != dict_form else None,
+                        "dictionary_form": dict_form if word != dict_form else None
                     })
 
     if results:
@@ -379,7 +521,6 @@ def dictionary():
             "word": word,
             "meanings": ["Definition not found."]
         })
-
 
 @app.route("/dictionaries", methods=["GET"])
 def list_dictionaries():
@@ -517,141 +658,6 @@ def unload_dictionary_route():
     else:
         return jsonify({"error": f"Dictionary {data['name']} not loaded"}), 400
 
-
-@app.route("/dictionaries/upload", methods=["POST"])
-def upload_dictionary():
-    """Upload a new dictionary zip file with proper Japanese name handling"""
-    if 'file' not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
-
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({"error": "No selected file"}), 400
-
-    # Get original filename
-    original_filename = file.filename
-    if not original_filename.lower().endswith('.zip'):
-        return jsonify({"error": "Only .zip files are supported"}), 400
-
-    temp_dir = None
-    try:
-        # Create temp directory
-        temp_dir = tempfile.mkdtemp()
-        zip_path = os.path.join(temp_dir, "temp_upload.zip")
-        file.save(zip_path)
-
-        # Verify it's actually a zip file
-        if not zipfile.is_zipfile(zip_path):
-            return jsonify({"error": "The file is not a valid ZIP archive"}), 400
-
-        # First try to get the dictionary name from index.json
-        dict_name = None
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            try:
-                with zip_ref.open('index.json') as index_file:
-                    index_data = json.load(index_file)
-                    if isinstance(index_data, dict):
-                        # Try different possible name fields
-                        for field in ['title', 'name', 'dictionary']:
-                            if field in index_data:
-                                dict_name = str(index_data[field])
-                                break
-            except (KeyError, json.JSONDecodeError):
-                pass
-
-        # Fallback to filename without extension if no name found in index.json
-        if not dict_name:
-            base_name = os.path.splitext(original_filename)[0]
-            # Clean up common patterns in filenames but preserve Japanese
-            clean_name = re.sub(r'(\[.*?\])|(\(.*?\))', '', base_name)  # Remove brackets and parentheses
-            clean_name = clean_name.strip()  # Remove extra whitespace
-            dict_name = clean_name
-
-        # Custom sanitization that preserves Japanese characters
-        def safe_japanese_filename(name):
-            # Keep Japanese characters, letters, numbers, spaces, and basic punctuation
-            keep_chars = (' ', '-', '_', '・', '～')
-            return ''.join(c for c in name if c.isalnum() or c in keep_chars).strip()
-
-        dict_name = safe_japanese_filename(dict_name) or "dictionary"
-
-        extract_path = os.path.join(DICTIONARY_BASE_PATH, dict_name)
-
-        # Remove existing if present
-        if os.path.exists(extract_path):
-            shutil.rmtree(extract_path)
-        os.makedirs(extract_path)
-
-        # Extract all files
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(extract_path)
-
-        # Verify we have term bank files
-        term_bank_files = [
-            f for f in os.listdir(extract_path)
-            if f.startswith("term_bank_") and f.endswith(".json")
-        ]
-
-        if not term_bank_files:
-            shutil.rmtree(extract_path)
-            return jsonify({"error": "No term bank files found in dictionary"}), 400
-
-        # Add the new dictionary to the order if it's not already there
-        if dict_name not in dictionary_order:
-            dictionary_order.append(dict_name)
-            save_config()
-
-        return jsonify({
-            "success": True,
-            "message": "Dictionary uploaded successfully",
-            "name": dict_name,
-            "term_banks": len(term_bank_files)
-        })
-
-    except Exception as e:
-        # Clean up on error
-        if temp_dir and os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir, ignore_errors=True)
-        if 'extract_path' in locals() and os.path.exists(extract_path):
-            shutil.rmtree(extract_path, ignore_errors=True)
-
-        return jsonify({
-            "error": f"Failed to process dictionary: {str(e)}",
-            "type": type(e).__name__
-        }), 500
-    finally:
-        if temp_dir and os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir, ignore_errors=True)
-
-
-@app.route("/dictionaries/<dict_name>", methods=["DELETE"])
-def delete_dictionary(dict_name):
-    """Delete a dictionary directory"""
-    dict_path = os.path.join(DICTIONARY_BASE_PATH, dict_name)
-    if not os.path.exists(dict_path):
-        return jsonify({"error": "Dictionary not found"}), 404
-
-    try:
-        import shutil
-        if dict_name in active_dictionaries:
-            unload_dictionary(dict_name)
-        shutil.rmtree(dict_path)
-
-        # Remove from order if present
-        if dict_name in dictionary_order:
-            dictionary_order.remove(dict_name)
-            save_config()
-
-        return jsonify({
-            "success": True,
-            "message": f"Dictionary {dict_name} deleted"
-        })
-    except Exception as e:
-        return jsonify({
-            "error": f"Failed to delete dictionary: {str(e)}"
-        }), 500
-
-
 @app.route("/dictionary/search", methods=["GET"])
 def search_dictionary_words():
     query = request.args.get("query", "").strip()
@@ -707,6 +713,62 @@ def search_dictionary_words():
 
     return jsonify(unique_results[:50])  # Return up to 50 matches
 
+
+def sanitize_filename(name: str) -> str:
+    # Залишає тільки літери, цифри, підкреслення і дефіси
+    return re.sub(r'[^a-zA-Z0-9_\-]', '_', name)
+
+@app.route("/sync/dictionaries", methods=["GET"])
+def get_dictionaries_state():
+    device_id = request.args.get("device_id")
+    if not device_id:
+        return jsonify({"error": "Missing device_id"}), 400
+
+    safe_device_id = sanitize_filename(device_id)
+    config_file = os.path.join(USER_DATA_DIR, f"{safe_device_id}_config.json")
+
+    try:
+        with open(config_file, "r", encoding="utf-8") as f:
+            config = json.load(f)
+            return jsonify({
+                "dictionaries": config.get("active_dictionaries", []),
+                "order": config.get("dictionary_order", [])
+            })
+    except FileNotFoundError:
+        return jsonify({"dictionaries": [], "order": []})
+
+@app.route("/sync/dictionaries", methods=["POST"])
+def save_dictionaries_state():
+    try:
+        data = request.get_json(force=True)
+        device_id = data.get("device_id")
+        if not device_id:
+            return jsonify({"error": "Missing device_id"}), 400
+
+        safe_device_id = sanitize_filename(device_id)
+
+        dictionaries = data.get("dictionaries", [])
+        order = data.get("order", [])
+
+        if not isinstance(dictionaries, list) or not isinstance(order, list):
+            return jsonify({"error": "Invalid format"}), 400
+
+        config = {
+            "active_dictionaries": dictionaries,
+            "dictionary_order": order
+        }
+
+        os.makedirs(USER_DATA_DIR, exist_ok=True)
+        config_file = os.path.join(USER_DATA_DIR, f"{safe_device_id}_config.json")
+
+        with open(config_file, "w", encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+
+        print(f"Saved dictionary config for {safe_device_id}")
+        return jsonify({"success": True})
+    except Exception as e:
+        print("Dictionary sync error:", e)
+        return jsonify({"error": str(e)}), 500
 
 # Initialize dictionaries on startup
 initialize_dictionaries()
