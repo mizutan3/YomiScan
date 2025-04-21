@@ -334,10 +334,12 @@ def ocr():
         custom_config = "--psm 6 -c preserve_interword_spaces=1"
         lang = "jpn"
 
+    full_config = f"{custom_config} {tessdata_dir_config}"
+
     extracted_text = pytesseract.image_to_string(
         processed_img,
         lang=lang,
-        config=custom_config
+        config=full_config
     )
 
     # Process the extracted text to join lines while preserving punctuation-newline cases
