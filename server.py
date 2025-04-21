@@ -179,6 +179,29 @@ def initialize_dictionaries():
 
     save_config()  # Ensure config is saved after initialization
 
+def download_default_dictionary():
+    """Download dictionary from GitHub if none exists"""
+    if not os.path.exists(DICTIONARY_BASE_PATH):
+        os.makedirs(DICTIONARY_BASE_PATH)
+
+    jmdict_path = os.path.join(DICTIONARY_BASE_PATH, "JMDict English", "term_bank_1.json")
+    if not os.path.exists(jmdict_path):
+        print("📦 No dictionary found. Downloading from GitHub...")
+
+        os.makedirs(os.path.dirname(jmdict_path), exist_ok=True)
+
+        import requests
+        url = "https://raw.githubusercontent.com/YOUR_USERNAME/YOUR_REPO/main/dictionaries/JMDict%20English/term_bank_1.json"
+        try:
+            r = requests.get(url)
+            if r.status_code == 200:
+                with open(jmdict_path, "w", encoding="utf-8") as f:
+                    f.write(r.text)
+                print("✅ Dictionary downloaded successfully.")
+            else:
+                print(f"❌ Failed to download dictionary (status {r.status_code})")
+        except Exception as e:
+            print("❌ Error downloading dictionary:", e)
 
 def unload_dictionary(dict_name: str) -> bool:
     """Unload a dictionary by removing its entries"""
@@ -773,6 +796,7 @@ def save_dictionaries_state():
         return jsonify({"error": str(e)}), 500
 
 # Initialize dictionaries on startup
+download_default_dictionary()
 initialize_dictionaries()
 
 if __name__ == "__main__":
