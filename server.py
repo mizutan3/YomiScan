@@ -164,6 +164,7 @@ def initialize_dictionaries():
     """Load initial dictionaries on startup"""
     print("Initializing dictionaries...")
     load_config()  # Load saved configuration
+    print(f"📁 Using dictionary base path: {DICTIONARY_BASE_PATH}")
 
     # Get all available dictionaries
     available = [d['name'] for d in get_available_dictionaries()]
