@@ -773,7 +773,6 @@ def save_dictionaries_state():
         return jsonify({"error": str(e)}), 500
 
 # Initialize dictionaries on startup
-download_default_dictionary()
 initialize_dictionaries()
 
 if __name__ == "__main__":
