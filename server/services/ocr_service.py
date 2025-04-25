@@ -5,7 +5,7 @@ import base64
 import time
 import pytesseract
 from flask import jsonify, request
-from ..constants import TEMP_IMAGE_PATH
+from ..constants import TEMP_IMAGE_PATH, TESSDATA_DIR
 from ..services.dictionary_service import segment_words
 import os
 
@@ -14,7 +14,7 @@ if os.name == 'nt':  # Windows
     tessdata_dir_config = r'--tessdata-dir "C:\\Program Files\\Tesseract-OCR\\tessdata"'
 else:  # Linux (Railway)
     pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
-    tessdata_dir_config = '--tessdata-dir ./tessdata'
+    tessdata_dir_config = f'--tessdata-dir {TESSDATA_DIR}'
 
 def adjust_gamma(image, gamma=1.0):
     """Gamma correction for brightness adjustment"""
