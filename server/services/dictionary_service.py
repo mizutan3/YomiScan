@@ -7,7 +7,7 @@ import cv2
 from typing import List, Dict, Set
 from fugashi import Tagger
 import MeCab
-from conjugation_rules import CONJUGATION_PATTERNS
+from ..conjugation_rules import CONJUGATION_PATTERNS
 from .config_service import load_config, save_config
 from ..constants import DICTIONARY_BASE_PATH, USER_DATA_DIR, dictionary_map, active_dictionaries, dictionary_order
 
