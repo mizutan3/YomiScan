@@ -5,6 +5,7 @@ TEMP_IMAGE_PATH = "./temp_image.jpg"
 
 DICTIONARY_BASE_PATH = os.environ.get("DICTIONARY_PATH", "./dictionaries")
 USER_DATA_DIR = os.environ.get("USER_DATA_PATH", "./user_data")
+TESSDATA_DIR = os.environ.get("TESSDATA_PATH", "./tessdata")
 
 #DICTIONARY_BASE_PATH = os.path.join(os.path.dirname(__file__), "dictionaries")
 #USER_DATA_DIR = os.path.join(os.path.dirname(__file__), "user_data")
