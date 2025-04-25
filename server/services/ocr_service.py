@@ -110,10 +110,10 @@ def ocr():
 
     # Configure Tesseract based on text orientation
     if orientation == "vertical":
-        custom_config = "--psm 5 -c preserve_interword_spaces=1"
+        custom_config = f"{tessdata_dir_config} --psm 5 -c preserve_interword_spaces=1"
         lang = "jpn_vert"
     else:
-        custom_config = "--psm 6 -c preserve_interword_spaces=1"
+        custom_config = f"{tessdata_dir_config} --psm 6 -c preserve_interword_spaces=1"
         lang = "jpn"
 
     extracted_text = pytesseract.image_to_string(
