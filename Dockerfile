@@ -37,4 +37,4 @@ RUN ls -la /usr/share/tesseract-ocr/4.00/tessdata/
 EXPOSE 5000
 
 # Command to run the application
-CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "server:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:$PORT", "main:app"]
