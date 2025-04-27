@@ -95,7 +95,7 @@ def load_dictionary(dict_name: str, device_id: str) -> bool:
 
 def unload_dictionary(dict_name: str, device_id: str) -> bool:
     global active_dictionaries
-    print(f"🔄 Trying to unload {dict_name} for device {device_id}")
+    print(f"Trying to unload {dict_name} for device {device_id}")
     load_config(device_id)
 
     if dict_name not in active_dictionaries:
@@ -124,20 +124,37 @@ def unload_dictionary(dict_name: str, device_id: str) -> bool:
     active_dictionaries.remove(dict_name)
     save_config(device_id, dictionary_order, active_dictionaries)
 
-    print(f"✅ Unloaded {dict_name} from dictionary_map[{device_id}]") if found_any else print(
-        f"⚠️ Nothing to unload for {dict_name} on device {device_id}")
+    print(f"Unloaded {dict_name} from dictionary_map[{device_id}]") if found_any else print(
+        f"Nothing to unload for {dict_name} on device {device_id}")
     return True
 
 def initialize_dictionaries(device_id: str):
     """Load user-specific dictionaries based on their config"""
-    global dictionary_order, active_dictionaries
+    global dictionary_order, active_dictionaries, dictionary_map
 
     print(f"Initializing dictionaries for device: {device_id}")
+
+    if device_id not in dictionary_map:
+        dictionary_map[device_id] = {}
+
     load_config(device_id)
 
     available = [d['name'] for d in get_available_dictionaries()]
 
-    # Якщо конфіг порожній — перший запуск
+    # Якщо словники ще не в пам'яті (сервер тільки запустився)
+    if not dictionary_map[device_id]:
+        print("Server restarted — restoring dictionaries from config")
+
+        for dict_name in dictionary_order:
+            if dict_name in available and dict_name in active_dictionaries:
+                success = load_dictionary(dict_name, device_id)
+                if not success:
+                    print(f"⚠Warning: failed to load {dict_name}")
+
+        save_config(device_id, dictionary_order, active_dictionaries)
+        return
+
+    # Нормальна ініціалізація
     if not dictionary_order and not active_dictionaries:
         print("First time setup — enabling all available dictionaries")
 
