@@ -130,31 +130,14 @@ def unload_dictionary(dict_name: str, device_id: str) -> bool:
 
 def initialize_dictionaries(device_id: str):
     """Load user-specific dictionaries based on their config"""
-    global dictionary_order, active_dictionaries, dictionary_map
+    global dictionary_order, active_dictionaries
 
     print(f"Initializing dictionaries for device: {device_id}")
-
-    if device_id not in dictionary_map:
-        dictionary_map[device_id] = {}
-
     load_config(device_id)
 
     available = [d['name'] for d in get_available_dictionaries()]
 
-    # Якщо словники ще не в пам'яті (сервер тільки запустився)
-    if not dictionary_map[device_id]:
-        print("Server restarted — restoring dictionaries from config")
-
-        for dict_name in dictionary_order:
-            if dict_name in available and dict_name in active_dictionaries:
-                success = load_dictionary(dict_name, device_id)
-                if not success:
-                    print(f"⚠Warning: failed to load {dict_name}")
-
-        save_config(device_id, dictionary_order, active_dictionaries)
-        return
-
-    # Нормальна ініціалізація
+    # Якщо конфіг порожній — перший запуск
     if not dictionary_order and not active_dictionaries:
         print("First time setup — enabling all available dictionaries")
 
