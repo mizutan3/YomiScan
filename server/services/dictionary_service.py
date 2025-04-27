@@ -135,9 +135,6 @@ def initialize_dictionaries(device_id: str):
     print(f"Initializing dictionaries for device: {device_id}")
     load_config(device_id)
 
-    if device_id not in dictionary_map:
-        dictionary_map[device_id] = {}
-
     available = [d['name'] for d in get_available_dictionaries()]
 
     # Якщо конфіг порожній — перший запуск
