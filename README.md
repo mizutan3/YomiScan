@@ -22,7 +22,7 @@
 
 ## SRS Decks
 
-<p align="center">
+<div align="center">
 
 ### View all card in the deck
 <img width="365" height="460" alt="image" src="https://github.com/user-attachments/assets/954d0878-e063-467b-8fa6-fc7e7a45c56a" />
@@ -37,4 +37,4 @@
 <img width="383" height="255" alt="image" src="https://github.com/user-attachments/assets/c083427a-2ccf-47fd-ab29-df35cfeda093" />
 
 ### "Back" side of the card
-<img width="338" height="705" alt="image" src="https://github.com/user-attachments/assets/b087e84b-b4a1-4440-b313-2538f0a37d39" /></p>
+<img width="338" height="705" alt="image" src="https://github.com/user-attachments/assets/b087e84b-b4a1-4440-b313-2538f0a37d39" /></div>
