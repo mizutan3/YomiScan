@@ -14,3 +14,8 @@ Mobile application for learning the Japanese language that integrates optical ch
 <img src="https://github.com/user-attachments/assets/73918b70-5b72-4a0b-bd5e-b323c55dddec"  height="550">
 <img src="https://github.com/user-attachments/assets/24730b71-8525-40b3-95c2-34e4fffe5b59"  height="550">
 
+## Dictionary search and repetition mode
+
+<img src="https://github.com/user-attachments/assets/567e6820-2deb-4321-b37d-7e03623da379"  height="550">
+<img src="https://github.com/user-attachments/assets/0c5768cf-9c04-4e05-9860-2a6abba77bcf"  height="550">
+<img src="https://github.com/user-attachments/assets/7867d8db-2486-49c9-8c56-8eb81658c858"  height="550">
