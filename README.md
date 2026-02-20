@@ -20,7 +20,10 @@ Mobile application for learning the Japanese language that integrates optical ch
 <img src="https://github.com/user-attachments/assets/0c5768cf-9c04-4e05-9860-2a6abba77bcf"  height="550">
 <img src="https://github.com/user-attachments/assets/7867d8db-2486-49c9-8c56-8eb81658c858"  height="550">
 
-
+## SRS Decks
+View all entries in the deck
 <img width="365" height="460" alt="image" src="https://github.com/user-attachments/assets/954d0878-e063-467b-8fa6-fc7e7a45c56a" />
+Creating a new deck
 <img width="366" height="230" alt="image" src="https://github.com/user-attachments/assets/338df54e-9fe5-4987-a378-eacc6c97169f" />
+Deck menu
 <img width="384" height="429" alt="image" src="https://github.com/user-attachments/assets/87fe49ae-0ca4-4d19-b4eb-347e94874c4d" />
