@@ -23,16 +23,16 @@
 ## SRS Decks
 
 ### View all card in the deck
-<p align="center"><img width="365" height="460" alt="image" src="https://github.com/user-attachments/assets/954d0878-e063-467b-8fa6-fc7e7a45c56a" /></p>p
+<img width="365" height="460" alt="image" src="https://github.com/user-attachments/assets/954d0878-e063-467b-8fa6-fc7e7a45c56a" />
 
 ### Creating a new deck
-<p align="center"><img width="366" height="230" alt="image" src="https://github.com/user-attachments/assets/338df54e-9fe5-4987-a378-eacc6c97169f" /></p>p
+<img width="366" height="230" alt="image" src="https://github.com/user-attachments/assets/338df54e-9fe5-4987-a378-eacc6c97169f" />
 
 ### Deck menu
-<p align="center"><img width="384" height="429" alt="image" src="https://github.com/user-attachments/assets/87fe49ae-0ca4-4d19-b4eb-347e94874c4d" /></p>p
+<img width="384" height="429" alt="image" src="https://github.com/user-attachments/assets/87fe49ae-0ca4-4d19-b4eb-347e94874c4d" />
 
 ### "Front" side of the card
-<p align="center"><img width="383" height="255" alt="image" src="https://github.com/user-attachments/assets/c083427a-2ccf-47fd-ab29-df35cfeda093" /></p>p
+<img width="383" height="255" alt="image" src="https://github.com/user-attachments/assets/c083427a-2ccf-47fd-ab29-df35cfeda093" />
 
 ### "Back" side of the card
-<p align="center"><img width="338" height="705" alt="image" src="https://github.com/user-attachments/assets/b087e84b-b4a1-4440-b313-2538f0a37d39" /></p>p
+<img width="338" height="705" alt="image" src="https://github.com/user-attachments/assets/b087e84b-b4a1-4440-b313-2538f0a37d39" /></p>
