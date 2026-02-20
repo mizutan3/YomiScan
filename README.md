@@ -1,6 +1,6 @@
 # YomiScan
 
-Mobile application for learning the Japanese language that integrates optical character recognition, dictionary support, and a personalized spaced repetition system.
+### Mobile application for learning the Japanese language that integrates optical character recognition, dictionary support, and a personalized spaced repetition system.
 
 ## App interface and settings: Orientation switch, OCR quality selection, Open dictionary settings, Browsing history panel
 
@@ -28,5 +28,5 @@ Mobile application for learning the Japanese language that integrates optical ch
 ### Creating a new deck
 <img width="366" height="230" alt="image" src="https://github.com/user-attachments/assets/338df54e-9fe5-4987-a378-eacc6c97169f" />
 
-###Deck menu
+### Deck menu
 <img width="384" height="429" alt="image" src="https://github.com/user-attachments/assets/87fe49ae-0ca4-4d19-b4eb-347e94874c4d" />
