@@ -2,8 +2,6 @@
 
 ### Mobile application for learning the Japanese language that integrates optical character recognition, dictionary support, and a personalized spaced repetition system.
 
-<div align="center">
-
 ## App interface and settings: Orientation switch, OCR quality selection, Open dictionary settings, Browsing history panel
 
 <img src="https://github.com/user-attachments/assets/d48b75ee-1955-4dec-92f2-8c06bd7fbfd9"  height="550">
@@ -37,4 +35,4 @@
 <img width="383" height="255" alt="image" src="https://github.com/user-attachments/assets/c083427a-2ccf-47fd-ab29-df35cfeda093" />
 
 ### "Back" side of the card
-<img width="338" height="705" alt="image" src="https://github.com/user-attachments/assets/b087e84b-b4a1-4440-b313-2538f0a37d39" /></div>
+<img width="338" height="705" alt="image" src="https://github.com/user-attachments/assets/b087e84b-b4a1-4440-b313-2538f0a37d39" />
