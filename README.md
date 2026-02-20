@@ -2,6 +2,8 @@
 
 ### Mobile application for learning the Japanese language that integrates optical character recognition, dictionary support, and a personalized spaced repetition system.
 
+<div align="center">
+
 ## App interface and settings: Orientation switch, OCR quality selection, Open dictionary settings, Browsing history panel
 
 <img src="https://github.com/user-attachments/assets/d48b75ee-1955-4dec-92f2-8c06bd7fbfd9"  height="550">
@@ -21,8 +23,6 @@
 <img src="https://github.com/user-attachments/assets/7867d8db-2486-49c9-8c56-8eb81658c858"  height="550">
 
 ## SRS Decks
-
-<div align="center">
 
 ### View all card in the deck
 <img width="365" height="460" alt="image" src="https://github.com/user-attachments/assets/954d0878-e063-467b-8fa6-fc7e7a45c56a" />
